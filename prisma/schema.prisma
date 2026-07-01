@@ -1,0 +1,590 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// M1 PAE Hub — Prisma Schema
+// Back-end de Domínio: NestJS + Prisma + PostgreSQL
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  OPERATOR
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum OccurrenceSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum OccurrenceCriticality {
+  ROUTINE
+  URGENT
+  EMERGENCY
+  CRISIS
+}
+
+enum OccurrenceStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  CANCELLED
+}
+
+enum OccurrenceType {
+  FIRE
+  MEDICAL
+  OPERATIONAL
+  ENVIRONMENTAL
+  SECURITY
+  STRUCTURAL
+  OTHER
+}
+
+enum AlertSeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  ACTIVE
+  ACKNOWLEDGED
+  RESOLVED
+  EXPIRED
+}
+
+enum AlertType {
+  SYSTEM
+  OPERATIONAL
+  SAFETY
+  ENVIRONMENTAL
+  SECURITY
+  THRESHOLD
+  MANUAL
+}
+
+enum WarRoomStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum TimelineEventType {
+  CREATED
+  STATUS_CHANGED
+  ASSIGNED
+  COMMENT
+  EVIDENCE_ADDED
+  ALERT_LINKED
+  WAR_ROOM_OPENED
+  WAR_ROOM_CLOSED
+  CHECKLIST_UPDATED
+  RESOLVED
+  CLOSED
+}
+
+enum EvidenceType {
+  PHOTO
+  VIDEO
+  DOCUMENT
+  AUDIO
+  OTHER
+}
+
+enum SafetyItemType {
+  EPI
+  TRAINING
+  INSPECTION
+  PROCEDURE
+  INCIDENT
+}
+
+enum SafetyItemStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+  CANCELLED
+}
+
+enum AiInsightSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AiAgentType {
+  MONITOR
+  RCA
+  SLA
+  RECOMMENDATION
+}
+
+enum KnowledgeEntryType {
+  RCA
+  LESSON_LEARNED
+  RECOMMENDATION
+  PROCEDURE
+  ANALYSIS
+  MANUAL
+}
+
+// ─── Organization & Terminal ──────────────────────────────────────────────────
+
+model Organization {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(255)
+  slug        String   @unique @db.VarChar(100)
+  description String?  @db.Text
+  logoUrl     String?  @db.VarChar(500)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  terminals Terminal[]
+  users     User[]
+
+  @@map("organizations")
+}
+
+model Terminal {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String   @db.VarChar(255)
+  code           String   @db.VarChar(50)
+  description    String?  @db.Text
+  location       String?  @db.VarChar(255)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  users        User[]
+  occurrences  Occurrence[]
+  alerts       Alert[]
+
+  @@unique([organizationId, code])
+  @@map("terminals")
+}
+
+// ─── Users & Auth ─────────────────────────────────────────────────────────────
+
+model User {
+  id             String     @id @default(uuid())
+  organizationId String
+  terminalId     String?
+  name           String     @db.VarChar(255)
+  email          String     @unique @db.VarChar(255)
+  passwordHash   String     @db.VarChar(255)
+  role           UserRole   @default(OPERATOR)
+  status         UserStatus @default(ACTIVE)
+  avatarUrl      String?    @db.VarChar(500)
+  phone          String?    @db.VarChar(50)
+  department     String?    @db.VarChar(100)
+  lastLoginAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  terminal     Terminal?    @relation(fields: [terminalId], references: [id])
+
+  refreshTokens        RefreshToken[]
+  reportedOccurrences  Occurrence[]         @relation("ReportedBy")
+  assignedOccurrences  Occurrence[]         @relation("AssignedTo")
+  timelineEvents       OccurrenceTimeline[]
+  warRoomParticipants  WarRoomParticipant[]
+  warRoomMessages      WarRoomMessage[]
+  warRoomDecisions     WarRoomDecision[]
+  acknowledgedAlerts   Alert[]              @relation("AcknowledgedBy")
+  resolvedAlerts       Alert[]              @relation("ResolvedBy")
+  safetyItems          SafetyItem[]
+  auditLogs            AuditLog[]
+  aiInsights           AgentInsight[]
+  knowledgeEntries     KnowledgeEntry[]
+  promptEvaluations    PromptEvaluation[]
+  aiFeedback           AiFeedback[]
+
+  @@index([organizationId])
+  @@index([terminalId])
+  @@index([email])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique @db.VarChar(512)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+// ─── Emergency Types ──────────────────────────────────────────────────────────
+
+model EmergencyType {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100)
+  code        String   @unique @db.VarChar(50)
+  description String?  @db.Text
+  color       String?  @db.VarChar(20)
+  icon        String?  @db.VarChar(50)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  occurrences Occurrence[]
+
+  @@map("emergency_types")
+}
+
+// ─── Occurrences ─────────────────────────────────────────────────────────────
+
+model Occurrence {
+  id                  String                @id @default(uuid())
+  code                String                @unique @db.VarChar(30)
+  terminalId          String
+  emergencyTypeId     String?
+  title               String                @db.VarChar(255)
+  description         String                @db.Text
+  type                OccurrenceType        @default(OPERATIONAL)
+  severity            OccurrenceSeverity    @default(MEDIUM)
+  criticality         OccurrenceCriticality @default(URGENT)
+  status              OccurrenceStatus      @default(OPEN)
+  location            String?               @db.VarChar(255)
+  latitude            Float?
+  longitude           Float?
+  reportedByUserId    String
+  assignedToUserId    String?
+  resolvedAt          DateTime?
+  closedAt            DateTime?
+  slaDeadline         DateTime?
+  isActive            Boolean               @default(true)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  terminal        Terminal       @relation(fields: [terminalId], references: [id])
+  emergencyType   EmergencyType? @relation(fields: [emergencyTypeId], references: [id])
+  reportedBy      User           @relation("ReportedBy", fields: [reportedByUserId], references: [id])
+  assignedTo      User?          @relation("AssignedTo", fields: [assignedToUserId], references: [id])
+
+  timeline    OccurrenceTimeline[]
+  evidences   Evidence[]
+  alerts      Alert[]
+  warRooms    WarRoom[]
+  checklist   ChecklistItem[]
+  aiInsights  AgentInsight[]
+
+  @@index([terminalId])
+  @@index([status])
+  @@index([severity])
+  @@index([createdAt])
+  @@map("occurrences")
+}
+
+model OccurrenceTimeline {
+  id           String            @id @default(uuid())
+  occurrenceId String
+  userId       String?
+  eventType    TimelineEventType
+  description  String            @db.Text
+  metadata     Json?
+  createdAt    DateTime          @default(now())
+
+  occurrence Occurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  user       User?      @relation(fields: [userId], references: [id])
+
+  @@index([occurrenceId])
+  @@map("occurrence_timeline")
+}
+
+model Evidence {
+  id           String       @id @default(uuid())
+  occurrenceId String
+  uploadedById String?
+  type         EvidenceType @default(PHOTO)
+  filename     String       @db.VarChar(255)
+  originalName String       @db.VarChar(255)
+  mimeType     String       @db.VarChar(100)
+  sizeBytes    Int
+  storageKey   String       @db.VarChar(500)
+  storageUrl   String       @db.VarChar(1000)
+  description  String?      @db.Text
+  createdAt    DateTime     @default(now())
+
+  occurrence Occurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+
+  @@index([occurrenceId])
+  @@map("evidences")
+}
+
+model ChecklistItem {
+  id           String   @id @default(uuid())
+  occurrenceId String
+  title        String   @db.VarChar(255)
+  isCompleted  Boolean  @default(false)
+  completedAt  DateTime?
+  completedBy  String?  @db.VarChar(255)
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  occurrence Occurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+
+  @@index([occurrenceId])
+  @@map("checklist_items")
+}
+
+// ─── Alerts ──────────────────────────────────────────────────────────────────
+
+model Alert {
+  id               String      @id @default(uuid())
+  terminalId       String
+  occurrenceId     String?
+  title            String      @db.VarChar(255)
+  message          String      @db.Text
+  type             AlertType   @default(OPERATIONAL)
+  severity         AlertSeverity @default(MEDIUM)
+  status           AlertStatus @default(ACTIVE)
+  source           String?     @db.VarChar(100)
+  acknowledgedById String?
+  acknowledgedAt   DateTime?
+  resolvedById     String?
+  resolvedAt       DateTime?
+  expiresAt        DateTime?
+  metadata         Json?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  terminal        Terminal    @relation(fields: [terminalId], references: [id])
+  occurrence      Occurrence? @relation(fields: [occurrenceId], references: [id])
+  acknowledgedBy  User?       @relation("AcknowledgedBy", fields: [acknowledgedById], references: [id])
+  resolvedBy      User?       @relation("ResolvedBy", fields: [resolvedById], references: [id])
+
+  @@index([terminalId])
+  @@index([status])
+  @@index([severity])
+  @@index([createdAt])
+  @@map("alerts")
+}
+
+// ─── War Room ─────────────────────────────────────────────────────────────────
+
+model WarRoom {
+  id           String        @id @default(uuid())
+  occurrenceId String
+  title        String        @db.VarChar(255)
+  status       WarRoomStatus @default(ACTIVE)
+  openedAt     DateTime      @default(now())
+  closedAt     DateTime?
+  closedReason String?       @db.Text
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  occurrence   Occurrence           @relation(fields: [occurrenceId], references: [id])
+  participants WarRoomParticipant[]
+  messages     WarRoomMessage[]
+  decisions    WarRoomDecision[]
+
+  @@index([occurrenceId])
+  @@map("war_rooms")
+}
+
+model WarRoomParticipant {
+  id        String   @id @default(uuid())
+  warRoomId String
+  userId    String
+  joinedAt  DateTime @default(now())
+  leftAt    DateTime?
+
+  warRoom WarRoom @relation(fields: [warRoomId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([warRoomId, userId])
+  @@map("war_room_participants")
+}
+
+model WarRoomMessage {
+  id        String   @id @default(uuid())
+  warRoomId String
+  userId    String
+  content   String   @db.Text
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  warRoom WarRoom @relation(fields: [warRoomId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([warRoomId])
+  @@map("war_room_messages")
+}
+
+model WarRoomDecision {
+  id          String   @id @default(uuid())
+  warRoomId   String
+  userId      String
+  description String   @db.Text
+  createdAt   DateTime @default(now())
+
+  warRoom WarRoom @relation(fields: [warRoomId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([warRoomId])
+  @@map("war_room_decisions")
+}
+
+// ─── Safety ──────────────────────────────────────────────────────────────────
+
+model SafetyItem {
+  id           String           @id @default(uuid())
+  terminalId   String?
+  assignedToId String?
+  type         SafetyItemType
+  title        String           @db.VarChar(255)
+  description  String?          @db.Text
+  status       SafetyItemStatus @default(PENDING)
+  dueDate      DateTime?
+  completedAt  DateTime?
+  metadata     Json?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  assignedTo User? @relation(fields: [assignedToId], references: [id])
+
+  @@index([terminalId])
+  @@index([status])
+  @@map("safety_items")
+}
+
+// ─── Audit Log ───────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String   @db.VarChar(100)
+  resource   String   @db.VarChar(100)
+  resourceId String?  @db.VarChar(100)
+  details    Json?
+  ipAddress  String?  @db.VarChar(50)
+  userAgent  String?  @db.VarChar(500)
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([resource])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ─── AI / Knowledge Platform ─────────────────────────────────────────────────
+
+model AgentInsight {
+  id           String            @id @default(uuid())
+  userId       String?
+  occurrenceId String?
+  agentType    AiAgentType
+  insightType  String            @db.VarChar(64)
+  severity     AiInsightSeverity @default(INFO)
+  title        String            @db.VarChar(255)
+  content      String            @db.Text
+  metadata     Json?
+  readAt       DateTime?
+  createdAt    DateTime          @default(now())
+
+  user       User?       @relation(fields: [userId], references: [id])
+  occurrence Occurrence? @relation(fields: [occurrenceId], references: [id])
+
+  @@index([occurrenceId])
+  @@index([agentType])
+  @@map("agent_insights")
+}
+
+model KnowledgeEntry {
+  id           String             @id @default(uuid())
+  authorId     String?
+  occurrenceId String?
+  type         KnowledgeEntryType
+  title        String             @db.VarChar(255)
+  content      String             @db.Text
+  tags         String[]
+  isPublished  Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  author User? @relation(fields: [authorId], references: [id])
+
+  @@index([type])
+  @@map("knowledge_entries")
+}
+
+model PromptVersion {
+  id           String   @id @default(uuid())
+  promptKey    String   @db.VarChar(64)
+  version      String   @db.VarChar(16)
+  systemPrompt String   @db.Text
+  userTemplate String   @db.Text
+  variables    String[]
+  notes        String?  @db.Text
+  isActive     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  evaluations PromptEvaluation[]
+
+  @@unique([promptKey, version])
+  @@index([promptKey])
+  @@map("prompt_versions")
+}
+
+model PromptEvaluation {
+  id              String   @id @default(uuid())
+  promptVersionId String
+  userId          String
+  rating          Int
+  feedback        String?  @db.Text
+  createdAt       DateTime @default(now())
+
+  promptVersion PromptVersion @relation(fields: [promptVersionId], references: [id])
+  user          User          @relation(fields: [userId], references: [id])
+
+  @@map("prompt_evaluations")
+}
+
+model AiFeedback {
+  id           String   @id @default(uuid())
+  userId       String
+  occurrenceId String?
+  analysisType String   @db.VarChar(64)
+  rating       Int
+  comment      String?  @db.Text
+  inputHash    String?  @db.VarChar(64)
+  outputHash   String?  @db.VarChar(64)
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("ai_feedback")
+}
