@@ -63,12 +63,15 @@ export class AuthService {
         name: user.name,
         email: user.email,
         role: user.role,
-        terminalId: user.terminalId,
+        accessLevel: user.accessLevel,
+        linkId: user.terminalId,
         terminalName: user.terminal?.name,
+        tacticalManagerId: user.tacticalManagerId,
         organizationId: user.organizationId,
         organizationName: user.organization?.name,
         avatarUrl: user.avatarUrl,
-        permissions: this.getPermissionsForRole(user.role),
+        allowedModules: user.allowedModules,
+        permissions: this.getPermissionsForRole(user.role, user.accessLevel),
       },
     };
   }
@@ -151,25 +154,29 @@ export class AuthService {
       name: user.name,
       email: user.email,
       role: user.role,
+      accessLevel: user.accessLevel,
       status: user.status,
-      terminalId: user.terminalId,
+      linkId: user.terminalId,
       terminalName: user.terminal?.name,
+      tacticalManagerId: user.tacticalManagerId,
       organizationId: user.organizationId,
       organizationName: user.organization?.name,
       avatarUrl: user.avatarUrl,
       phone: user.phone,
       department: user.department,
       lastLoginAt: user.lastLoginAt,
-      permissions: this.getPermissionsForRole(user.role),
+      allowedModules: user.allowedModules,
+      permissions: this.getPermissionsForRole(user.role, user.accessLevel),
     };
   }
 
-  private async generateTokens(user: { id: string; email: string; role: string; terminalId?: string | null; organizationId: string }) {
+  private async generateTokens(user: { id: string; email: string; role: string; accessLevel?: string | null; terminalId?: string | null; organizationId: string }) {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       role: user.role,
-      terminalId: user.terminalId ?? undefined,
+      accessLevel: user.accessLevel ?? null,
+      terminalId: user.terminalId ?? null,
       organizationId: user.organizationId,
     };
 
@@ -191,19 +198,36 @@ export class AuthService {
     return { accessToken, refreshToken: refreshTokenValue };
   }
 
-  private getPermissionsForRole(role: string): string[] {
-    const basePermissions = ['emergency.read', 'view_dashboard', 'view_cop', 'view_occurrences', 'view_alerts', 'view_safety'];
-    const operatorPermissions = [...basePermissions, 'view_warroom', 'view_aicommand', 'emergency.create', 'emergency.update', 'manage_occurrences', 'manage_warroom'];
-    const managerPermissions = [...operatorPermissions, 'emergency.delete', 'manage_alerts', 'manage_safety', 'view_reports'];
-    const adminPermissions = [...managerPermissions, 'manage_users', 'manage_roles', 'manage_organizations', 'view_audit_logs', 'manage_ai'];
-    const superAdminPermissions = [...adminPermissions, 'manage_system', 'manage_terminals'];
+  /**
+   * Permissões derivadas do modelo oficial (Funcional §2): admin / terminal(+nível) / entity.
+   * Auxiliar — o front deriva o menu de role + accessLevel; isto complementa checagens finas.
+   */
+  private getPermissionsForRole(role: string, accessLevel?: string | null): string[] {
+    const readBase = [
+      'view_dashboard', 'view_cop', 'view_occurrences', 'view_map',
+      'view_documents', 'view_plans', 'view_risks',
+    ];
+    const manageOperational = [
+      'manage_occurrences', 'manage_plans', 'manage_risks', 'manage_map',
+      'manage_documents', 'manage_trainings', 'manage_epis', 'manage_compliance',
+    ];
 
-    switch (role) {
-      case 'SUPER_ADMIN': return superAdminPermissions;
-      case 'ADMIN': return adminPermissions;
-      case 'MANAGER': return managerPermissions;
-      case 'OPERATOR': return operatorPermissions;
-      default: return basePermissions;
+    if (role === 'admin') {
+      return [
+        ...readBase, ...manageOperational, 'view_reports',
+        'manage_users', 'manage_terminals', 'manage_entities',
+        'manage_permissions', 'manage_modules', 'view_audit',
+      ];
     }
+
+    if (role === 'entity') {
+      return ['view_cop', 'view_occurrences', 'view_map', 'view_documents'];
+    }
+
+    // role === 'terminal' — depende do nível de acesso
+    if (accessLevel === 'operacional') return ['view_my_panel'];
+    if (accessLevel === 'estratégico') return [...readBase, 'view_reports'];
+    // tático (padrão)
+    return [...readBase, ...manageOperational];
   }
 }

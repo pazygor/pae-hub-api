@@ -8,7 +8,8 @@ export interface JwtPayload {
   sub: string;
   email: string;
   role: string;
-  terminalId?: string;
+  accessLevel?: string | null;
+  terminalId?: string | null;
   organizationId: string;
 }
 
@@ -33,8 +34,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         email: true,
         name: true,
         role: true,
+        accessLevel: true,
         status: true,
         terminalId: true,
+        tacticalManagerId: true,
         organizationId: true,
       },
     });

@@ -1,15 +1,17 @@
 import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UserRole, UserStatus } from '@prisma/client';
+import { UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
-import { IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { USER_ROLES, ACCESS_LEVELS } from '../../domain/enums';
 
 export class CreateUserDto {
   @ApiProperty() @IsString() name: string;
   @ApiProperty() @IsEmail() email: string;
   @ApiProperty() @IsString() @MinLength(8) password: string;
-  @ApiPropertyOptional({ enum: UserRole }) @IsOptional() @IsEnum(UserRole) role?: UserRole;
+  @ApiPropertyOptional({ enum: USER_ROLES }) @IsOptional() @IsIn([...USER_ROLES]) role?: string;
+  @ApiPropertyOptional({ enum: ACCESS_LEVELS }) @IsOptional() @IsIn([...ACCESS_LEVELS]) accessLevel?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() terminalId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() phone?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
@@ -23,7 +25,7 @@ export class UsersService {
 
   constructor(private prisma: PrismaService) {}
 
-  async findAll(query: { terminalId?: string; role?: UserRole; status?: UserStatus; page?: number; limit?: number }, user: any) {
+  async findAll(query: { terminalId?: string; role?: string; status?: UserStatus; page?: number; limit?: number }, user: any) {
     const { terminalId, role, status, page = 1, limit = 20 } = query;
     const skip = (Number(page) - 1) * Number(limit);
 
@@ -75,7 +77,8 @@ export class UsersService {
         name: dto.name,
         email: dto.email.toLowerCase(),
         passwordHash,
-        role: dto.role || UserRole.OPERATOR,
+        role: dto.role || 'terminal',
+        accessLevel: dto.accessLevel,
         status: UserStatus.ACTIVE,
         organizationId: requestingUser.organizationId,
         terminalId: dto.terminalId || requestingUser.terminalId,
@@ -100,6 +103,7 @@ export class UsersService {
     if (dto.phone !== undefined) data.phone = dto.phone;
     if (dto.department !== undefined) data.department = dto.department;
     if (dto.role) data.role = dto.role;
+    if (dto.accessLevel) data.accessLevel = dto.accessLevel;
     if (dto.terminalId) data.terminalId = dto.terminalId;
     if (dto.password) data.passwordHash = await bcrypt.hash(dto.password, 12);
 

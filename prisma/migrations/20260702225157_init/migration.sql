@@ -1,7 +1,4 @@
 -- CreateEnum
-CREATE TYPE "UserRole" AS ENUM ('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'OPERATOR', 'VIEWER');
-
--- CreateEnum
 CREATE TYPE "UserStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED');
 
 -- CreateEnum
@@ -86,7 +83,12 @@ CREATE TABLE "users" (
     "name" VARCHAR(255) NOT NULL,
     "email" VARCHAR(255) NOT NULL,
     "passwordHash" VARCHAR(255) NOT NULL,
-    "role" "UserRole" NOT NULL DEFAULT 'OPERATOR',
+    "role" VARCHAR(20) NOT NULL DEFAULT 'terminal',
+    "accessLevel" VARCHAR(20),
+    "tacticalManagerId" TEXT,
+    "allowedModules" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "allowedTerminals" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "allowedOccurrenceTypes" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "status" "UserStatus" NOT NULL DEFAULT 'ACTIVE',
     "avatarUrl" VARCHAR(500),
     "phone" VARCHAR(50),
@@ -492,6 +494,9 @@ ALTER TABLE "users" ADD CONSTRAINT "users_organizationId_fkey" FOREIGN KEY ("org
 
 -- AddForeignKey
 ALTER TABLE "users" ADD CONSTRAINT "users_terminalId_fkey" FOREIGN KEY ("terminalId") REFERENCES "terminals"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "users" ADD CONSTRAINT "users_tacticalManagerId_fkey" FOREIGN KEY ("tacticalManagerId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;

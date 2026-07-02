@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { OccurrenceStatus, TimelineEventType, UserRole } from '@prisma/client';
+import { OccurrenceStatus, TimelineEventType } from '@prisma/client';
 import {
   CreateOccurrenceDto,
   UpdateOccurrenceDto,
@@ -22,7 +22,7 @@ export class EmergencyService {
     const where: any = { isActive: true };
 
     // Tenant isolation: non-admins see only their terminal
-    if (user.role !== UserRole.SUPER_ADMIN && user.role !== UserRole.ADMIN) {
+    if (user.role !== 'admin') {
       where.terminalId = user.terminalId;
     } else if (terminalId && terminalId !== 'all') {
       where.terminalId = terminalId;
@@ -201,7 +201,7 @@ export class EmergencyService {
   }
 
   private checkTenantAccess(occurrence: any, user: any) {
-    if (user.role === UserRole.SUPER_ADMIN || user.role === UserRole.ADMIN) return;
+    if (user.role === 'admin') return;
     if (occurrence.terminalId !== user.terminalId) {
       throw new ForbiddenException('Acesso negado a este recurso');
     }

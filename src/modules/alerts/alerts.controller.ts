@@ -5,7 +5,6 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
 
 @ApiTags('Alerts')
 @ApiBearerAuth()
@@ -27,21 +26,21 @@ export class AlertsController {
   }
 
   @Post()
-  @Roles(UserRole.OPERATOR, UserRole.MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles('admin', 'terminal')
   @ApiOperation({ summary: 'Criar novo alerta manualmente' })
   create(@Body() dto: CreateAlertDto, @CurrentUser() user: any) {
     return this.service.create(dto, user);
   }
 
   @Put(':id/acknowledge')
-  @Roles(UserRole.OPERATOR, UserRole.MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles('admin', 'terminal')
   @ApiOperation({ summary: 'Reconhecer alerta' })
   acknowledge(@Param('id') id: string, @CurrentUser() user: any) {
     return this.service.acknowledge(id, user);
   }
 
   @Put(':id/resolve')
-  @Roles(UserRole.OPERATOR, UserRole.MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles('admin', 'terminal')
   @ApiOperation({ summary: 'Resolver alerta' })
   resolve(@Param('id') id: string, @CurrentUser() user: any) {
     return this.service.resolve(id, user);

@@ -9,8 +9,8 @@ async function bootstrap() {
   });
 
   const port = process.env.PORT || 3001;
-  const prefix = process.env.API_PREFIX || 'api/v1';
-  const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:5173').split(',');
+  const prefix = process.env.API_PREFIX || 'api';
+  const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:8080,http://localhost:3000,http://localhost:5173').split(',');
 
   // ─── Global prefix ────────────────────────────────────────────────────────
   app.setGlobalPrefix(prefix);

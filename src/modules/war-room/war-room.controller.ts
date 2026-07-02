@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole, WarRoomStatus } from '@prisma/client';
+import { WarRoomStatus } from '@prisma/client';
 
 @ApiTags('War Room')
 @ApiBearerAuth()
@@ -33,28 +33,28 @@ export class WarRoomController {
   }
 
   @Post()
-  @Roles(UserRole.OPERATOR, UserRole.MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles('admin', 'terminal')
   @ApiOperation({ summary: 'Abrir nova War Room para uma ocorrência' })
   create(@Body() dto: { occurrenceId: string; title?: string }, @CurrentUser() user: any) {
     return this.service.create(dto, user);
   }
 
   @Post(':id/messages')
-  @Roles(UserRole.OPERATOR, UserRole.MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles('admin', 'terminal')
   @ApiOperation({ summary: 'Enviar mensagem na War Room' })
   addMessage(@Param('id') id: string, @Body() body: { content: string }, @CurrentUser() user: any) {
     return this.service.addMessage(id, body.content, user);
   }
 
   @Post(':id/decisions')
-  @Roles(UserRole.MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles('admin', 'terminal')
   @ApiOperation({ summary: 'Registrar decisão na War Room' })
   addDecision(@Param('id') id: string, @Body() body: { description: string }, @CurrentUser() user: any) {
     return this.service.addDecision(id, body.description, user);
   }
 
   @Put(':id/close')
-  @Roles(UserRole.MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles('admin', 'terminal')
   @ApiOperation({ summary: 'Encerrar War Room' })
   close(@Param('id') id: string, @Body() body: { reason: string }, @CurrentUser() user: any) {
     return this.service.close(id, body.reason, user);

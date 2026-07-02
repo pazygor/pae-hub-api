@@ -42,7 +42,7 @@ npm run seed
 npm run start:dev
 ```
 
-A API estará disponível em `http://localhost:3001/api/v1`.
+A API estará disponível em `http://localhost:3001/api`.
 O Swagger estará em `http://localhost:3001/api/docs`.
 
 ---
@@ -86,68 +86,68 @@ NODE_ENV=development
 
 ### Autenticação
 ```
-POST   /api/v1/auth/login          → Login com e-mail e senha
-POST   /api/v1/auth/refresh        → Renovar access token
-POST   /api/v1/auth/logout         → Encerrar sessão
-GET    /api/v1/auth/me             → Perfil do usuário autenticado
+POST   /api/auth/login          → Login com e-mail e senha
+POST   /api/auth/refresh        → Renovar access token
+POST   /api/auth/logout         → Encerrar sessão
+GET    /api/auth/me             → Perfil do usuário autenticado
 ```
 
 ### Ocorrências / Emergências
 ```
-GET    /api/v1/occurrences         → Listar com filtros (status, severity, type, page)
-GET    /api/v1/occurrences/:id     → Buscar por ID (com timeline, alertas, war room)
-POST   /api/v1/occurrences         → Criar nova ocorrência
-PUT    /api/v1/occurrences/:id/status → Alterar status (OPEN → IN_PROGRESS → RESOLVED → CLOSED)
-POST   /api/v1/occurrences/:id/timeline → Adicionar evento à timeline
-GET    /api/v1/emergency-types     → Listar tipos de emergência
+GET    /api/occurrences         → Listar com filtros (status, severity, type, page)
+GET    /api/occurrences/:id     → Buscar por ID (com timeline, alertas, war room)
+POST   /api/occurrences         → Criar nova ocorrência
+PUT    /api/occurrences/:id/status → Alterar status (OPEN → IN_PROGRESS → RESOLVED → CLOSED)
+POST   /api/occurrences/:id/timeline → Adicionar evento à timeline
+GET    /api/emergency-types     → Listar tipos de emergência
 ```
 
 ### Alertas
 ```
-GET    /api/v1/alerts              → Listar alertas
-POST   /api/v1/alerts              → Criar alerta manual
-PUT    /api/v1/alerts/:id/acknowledge → Reconhecer alerta
-PUT    /api/v1/alerts/:id/resolve  → Resolver alerta
+GET    /api/alerts              → Listar alertas
+POST   /api/alerts              → Criar alerta manual
+PUT    /api/alerts/:id/acknowledge → Reconhecer alerta
+PUT    /api/alerts/:id/resolve  → Resolver alerta
 ```
 
 ### War Room
 ```
-GET    /api/v1/war-rooms           → Listar war rooms
-GET    /api/v1/war-rooms/:id       → Buscar com mensagens e decisões
-POST   /api/v1/war-rooms           → Abrir nova war room
-POST   /api/v1/war-rooms/:id/messages → Enviar mensagem
-POST   /api/v1/war-rooms/:id/decisions → Registrar decisão
-PUT    /api/v1/war-rooms/:id/close → Encerrar war room
+GET    /api/war-rooms           → Listar war rooms
+GET    /api/war-rooms/:id       → Buscar com mensagens e decisões
+POST   /api/war-rooms           → Abrir nova war room
+POST   /api/war-rooms/:id/messages → Enviar mensagem
+POST   /api/war-rooms/:id/decisions → Registrar decisão
+PUT    /api/war-rooms/:id/close → Encerrar war room
 ```
 
 ### Dashboard / KPIs
 ```
-GET    /api/v1/dashboard/kpis      → KPIs gerais
-GET    /api/v1/dashboard/cop-indicators → Indicadores em tempo real para o COP
+GET    /api/dashboard/kpis      → KPIs gerais
+GET    /api/dashboard/cop-indicators → Indicadores em tempo real para o COP
 ```
 
 ### AI Command
 ```
-POST   /api/v1/ai/chat             → Enviar mensagem ao AI Command
-GET    /api/v1/ai/insights         → Listar insights dos agentes
-GET    /api/v1/ai/knowledge        → Buscar na base de conhecimento
+POST   /api/ai/chat             → Enviar mensagem ao AI Command
+GET    /api/ai/insights         → Listar insights dos agentes
+GET    /api/ai/knowledge        → Buscar na base de conhecimento
 ```
 
 ### Usuários
 ```
-GET    /api/v1/users               → Listar usuários (MANAGER+)
-GET    /api/v1/users/:id           → Buscar por ID
-POST   /api/v1/users               → Criar usuário (ADMIN+)
-PUT    /api/v1/users/:id           → Atualizar usuário
-PUT    /api/v1/users/:id/status    → Ativar/suspender
+GET    /api/users               → Listar usuários (MANAGER+)
+GET    /api/users/:id           → Buscar por ID
+POST   /api/users               → Criar usuário (ADMIN+)
+PUT    /api/users/:id           → Atualizar usuário
+PUT    /api/users/:id/status    → Ativar/suspender
 ```
 
 ### Segurança
 ```
-GET    /api/v1/safety              → Listar itens de segurança
-GET    /api/v1/safety/summary      → Resumo por status
-POST   /api/v1/safety              → Criar item
-PUT    /api/v1/safety/:id          → Atualizar item
+GET    /api/safety              → Listar itens de segurança
+GET    /api/safety/summary      → Resumo por status
+POST   /api/safety              → Criar item
+PUT    /api/safety/:id          → Atualizar item
 ```
 
 ---
@@ -231,7 +231,7 @@ Para conectar o Hub Web (BFF) a este back-end, configure no `.env` do projeto `m
 PAE_API_URL=http://localhost:3001
 ```
 
-O `paeProxy.ts` do BFF encaminhará automaticamente todas as requisições `/api/v1/*` para este back-end em vez de usar os mocks.
+O `paeProxy.ts` do BFF encaminhará automaticamente todas as requisições `/api/*` para este back-end em vez de usar os mocks.
 
 ---
 

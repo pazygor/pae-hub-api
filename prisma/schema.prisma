@@ -13,14 +13,6 @@ datasource db {
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
-enum UserRole {
-  SUPER_ADMIN
-  ADMIN
-  MANAGER
-  OPERATOR
-  VIEWER
-}
-
 enum UserStatus {
   ACTIVE
   INACTIVE
@@ -193,20 +185,27 @@ model User {
   id             String     @id @default(uuid())
   organizationId String
   terminalId     String?
-  name           String     @db.VarChar(255)
-  email          String     @unique @db.VarChar(255)
-  passwordHash   String     @db.VarChar(255)
-  role           UserRole   @default(OPERATOR)
-  status         UserStatus @default(ACTIVE)
-  avatarUrl      String?    @db.VarChar(500)
-  phone          String?    @db.VarChar(50)
-  department     String?    @db.VarChar(100)
-  lastLoginAt    DateTime?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  name                   String     @db.VarChar(255)
+  email                  String     @unique @db.VarChar(255)
+  passwordHash           String     @db.VarChar(255)
+  role                   String     @default("terminal") @db.VarChar(20) // admin | terminal | entity
+  accessLevel            String?    @db.VarChar(20)                       // estratégico | tático | operacional
+  tacticalManagerId      String?                                         // Operacional → Tático
+  allowedModules         String[]   @default([])
+  allowedTerminals       String[]   @default([])
+  allowedOccurrenceTypes String[]   @default([])
+  status                 UserStatus @default(ACTIVE)
+  avatarUrl              String?    @db.VarChar(500)
+  phone                  String?    @db.VarChar(50)
+  department             String?    @db.VarChar(100)
+  lastLoginAt            DateTime?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  terminal     Terminal?    @relation(fields: [terminalId], references: [id])
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  terminal         Terminal?    @relation(fields: [terminalId], references: [id])
+  tacticalManager  User?        @relation("TacticalTeam", fields: [tacticalManagerId], references: [id])
+  managedOperators User[]       @relation("TacticalTeam")
 
   refreshTokens        RefreshToken[]
   reportedOccurrences  Occurrence[]         @relation("ReportedBy")

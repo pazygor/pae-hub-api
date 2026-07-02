@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AlertStatus, AlertSeverity, AlertType, UserRole } from '@prisma/client';
+import { AlertStatus, AlertSeverity, AlertType } from '@prisma/client';
 
 export interface CreateAlertDto {
   title: string;
@@ -36,7 +36,7 @@ export class AlertsService {
 
     const where: any = {};
 
-    if (user.role !== UserRole.SUPER_ADMIN && user.role !== UserRole.ADMIN) {
+    if (user.role !== 'admin') {
       where.terminalId = user.terminalId;
     } else if (terminalId && terminalId !== 'all') {
       where.terminalId = terminalId;
