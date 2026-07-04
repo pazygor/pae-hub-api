@@ -166,6 +166,12 @@ model Terminal {
   code           String   @db.VarChar(50)
   description    String?  @db.Text
   location       String?  @db.VarChar(255)
+  // Alinhamento ao DER §6.3 (Fase 4a)
+  responsible    String?  @db.VarChar(255)
+  contact        String?  @db.VarChar(100)
+  latitude       Float?
+  longitude      Float?
+  status         String   @default("Ativo") @db.VarChar(20) // Ativo | Inativo | Revisão
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

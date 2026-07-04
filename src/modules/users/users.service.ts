@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ConflictException, Logger } from '@nestj
 import { PrismaService } from '../../prisma/prisma.service';
 import { UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
-import { IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, MinLength, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { USER_ROLES, ACCESS_LEVELS } from '../../domain/enums';
 
@@ -13,8 +13,13 @@ export class CreateUserDto {
   @ApiPropertyOptional({ enum: USER_ROLES }) @IsOptional() @IsIn([...USER_ROLES]) role?: string;
   @ApiPropertyOptional({ enum: ACCESS_LEVELS }) @IsOptional() @IsIn([...ACCESS_LEVELS]) accessLevel?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() terminalId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() tacticalManagerId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() phone?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
+  // Acesso granular por usuário (tela "Níveis de Acesso" — Fase 4a)
+  @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) allowedModules?: string[];
+  @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) allowedTerminals?: string[];
+  @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) allowedOccurrenceTypes?: string[];
 }
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {}
@@ -41,8 +46,10 @@ export class UsersService {
         take: Number(limit),
         orderBy: { name: 'asc' },
         select: {
-          id: true, name: true, email: true, role: true, status: true,
-          terminalId: true, phone: true, department: true, avatarUrl: true, lastLoginAt: true, createdAt: true,
+          id: true, name: true, email: true, role: true, accessLevel: true, status: true,
+          terminalId: true, tacticalManagerId: true,
+          allowedModules: true, allowedTerminals: true, allowedOccurrenceTypes: true,
+          phone: true, department: true, avatarUrl: true, lastLoginAt: true, createdAt: true,
           terminal: { select: { id: true, name: true } },
         },
       }),
@@ -56,8 +63,10 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
-        id: true, name: true, email: true, role: true, status: true,
-        terminalId: true, phone: true, department: true, avatarUrl: true, lastLoginAt: true, createdAt: true,
+        id: true, name: true, email: true, role: true, accessLevel: true, status: true,
+        terminalId: true, tacticalManagerId: true,
+        allowedModules: true, allowedTerminals: true, allowedOccurrenceTypes: true,
+        phone: true, department: true, avatarUrl: true, lastLoginAt: true, createdAt: true,
         terminal: { select: { id: true, name: true } },
         organization: { select: { id: true, name: true } },
       },
@@ -79,6 +88,10 @@ export class UsersService {
         passwordHash,
         role: dto.role || 'terminal',
         accessLevel: dto.accessLevel,
+        tacticalManagerId: dto.tacticalManagerId,
+        allowedModules: dto.allowedModules ?? [],
+        allowedTerminals: dto.allowedTerminals ?? [],
+        allowedOccurrenceTypes: dto.allowedOccurrenceTypes ?? [],
         status: UserStatus.ACTIVE,
         organizationId: requestingUser.organizationId,
         terminalId: dto.terminalId || requestingUser.terminalId,
@@ -86,7 +99,7 @@ export class UsersService {
         department: dto.department,
       },
       select: {
-        id: true, name: true, email: true, role: true, status: true, createdAt: true,
+        id: true, name: true, email: true, role: true, accessLevel: true, status: true, createdAt: true,
       },
     });
 
@@ -103,15 +116,22 @@ export class UsersService {
     if (dto.phone !== undefined) data.phone = dto.phone;
     if (dto.department !== undefined) data.department = dto.department;
     if (dto.role) data.role = dto.role;
-    if (dto.accessLevel) data.accessLevel = dto.accessLevel;
+    if (dto.accessLevel !== undefined) data.accessLevel = dto.accessLevel;
     if (dto.terminalId) data.terminalId = dto.terminalId;
+    if (dto.tacticalManagerId !== undefined) data.tacticalManagerId = dto.tacticalManagerId;
+    if (dto.allowedModules !== undefined) data.allowedModules = dto.allowedModules;
+    if (dto.allowedTerminals !== undefined) data.allowedTerminals = dto.allowedTerminals;
+    if (dto.allowedOccurrenceTypes !== undefined) data.allowedOccurrenceTypes = dto.allowedOccurrenceTypes;
     if (dto.password) data.passwordHash = await bcrypt.hash(dto.password, 12);
 
     const updated = await this.prisma.user.update({
       where: { id },
       data,
       select: {
-        id: true, name: true, email: true, role: true, status: true, phone: true, department: true,
+        id: true, name: true, email: true, role: true, accessLevel: true, status: true,
+        terminalId: true, tacticalManagerId: true,
+        allowedModules: true, allowedTerminals: true, allowedOccurrenceTypes: true,
+        phone: true, department: true,
       },
     });
 

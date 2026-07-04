@@ -31,6 +31,11 @@ async function main() {
       name: 'Terminal Norte (TECON)',
       code: 'T01',
       location: 'Cais 1 - Berço 101, Santos/SP',
+      responsible: 'Carlos Silva',
+      contact: '(13) 9982-1122',
+      latitude: -23.9618,
+      longitude: -46.3322,
+      status: 'Ativo',
       isActive: true,
     },
   });
@@ -43,6 +48,11 @@ async function main() {
       name: 'Terminal Químico Sul',
       code: 'T02',
       location: 'Cais 4 - Berço 402, Santos/SP',
+      responsible: 'Ana Paula Mendes',
+      contact: '(13) 9971-3344',
+      latitude: -23.9720,
+      longitude: -46.3280,
+      status: 'Revisão',
       isActive: true,
     },
   });

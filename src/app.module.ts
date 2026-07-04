@@ -6,6 +6,7 @@ import { APP_GUARD, APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { TerminalsModule } from './modules/terminals/terminals.module';
 import { EmergencyModule } from './modules/emergency/emergency.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { WarRoomModule } from './modules/war-room/war-room.module';
@@ -26,6 +27,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     PrismaModule,
     AuthModule,
     UsersModule,
+    TerminalsModule,
     EmergencyModule,
     AlertsModule,
     WarRoomModule,
