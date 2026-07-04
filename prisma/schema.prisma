@@ -155,8 +155,56 @@ model Organization {
 
   terminals Terminal[]
   users     User[]
+  entities  Entity[]
 
   @@map("organizations")
+}
+
+// ─── Entidades externas & Acionamento (cadastro — Fase 4b) ────────────────────
+
+model Entity {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String   @db.VarChar(255)
+  type           String   @db.VarChar(100) // Emergência | Ambiental | Autoridade Portuária ...
+  contact        String?  @db.VarChar(100)
+  status         String   @default("Ativo") @db.VarChar(20) // Ativo | Inativo
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization      Organization       @relation(fields: [organizationId], references: [id])
+  permission        Permission?
+  notificationRules NotificationRule[]
+
+  @@index([organizationId])
+  @@map("entities")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  entityId    String   @unique
+  terminalIds String[] @default([]) // UUIDs de Terminal que a entidade atende
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@map("permissions")
+}
+
+model NotificationRule {
+  id             String   @id @default(uuid())
+  organizationId String
+  occurrenceType String   @db.VarChar(100)
+  entityId       String
+  mandatory      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([entityId])
+  @@map("notification_rules")
 }
 
 model Terminal {

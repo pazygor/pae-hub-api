@@ -7,6 +7,9 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { TerminalsModule } from './modules/terminals/terminals.module';
+import { EntitiesModule } from './modules/entities/entities.module';
+import { PermissionsModule } from './modules/permissions/permissions.module';
+import { NotificationRulesModule } from './modules/notification-rules/notification-rules.module';
 import { EmergencyModule } from './modules/emergency/emergency.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { WarRoomModule } from './modules/war-room/war-room.module';
@@ -28,6 +31,9 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     AuthModule,
     UsersModule,
     TerminalsModule,
+    EntitiesModule,
+    PermissionsModule,
+    NotificationRulesModule,
     EmergencyModule,
     AlertsModule,
     WarRoomModule,

@@ -56,7 +56,77 @@ async function main() {
       isActive: true,
     },
   });
-  console.log(`✅ Terminais: ${terminal1.name}, ${terminal2.name}`);
+  const terminal3 = await prisma.terminal.upsert({
+    where: { organizationId_code: { organizationId: org.id, code: 'T03' } },
+    update: {},
+    create: {
+      organizationId: org.id,
+      name: 'Terminal de Granéis Líquidos',
+      code: 'T03',
+      location: 'Cais 7 - Berço 701, Santos/SP',
+      responsible: 'Roberto Almeida',
+      contact: '(13) 9965-5566',
+      latitude: -23.9550,
+      longitude: -46.3400,
+      status: 'Ativo',
+      isActive: true,
+    },
+  });
+  console.log(`✅ Terminais: ${terminal1.name}, ${terminal2.name}, ${terminal3.name}`);
+
+  // ─── Entidades externas + Permissões + Regras de acionamento (Fase 4b) ──────
+  const entitySpecs = [
+    { key: 'bombeiros', name: 'Corpo de Bombeiros', type: 'Emergência', contact: '193' },
+    { key: 'autoridade', name: 'Autoridade Portuária de Santos', type: 'Autoridade Portuária', contact: '(13) 3202-6565' },
+    { key: 'defesa', name: 'Defesa Civil', type: 'Emergência', contact: '199' },
+    { key: 'ibama', name: 'Órgão Ambiental (IBAMA)', type: 'Ambiental', contact: '0800-618-080' },
+  ];
+  const ent: Record<string, { id: string }> = {};
+  for (const e of entitySpecs) {
+    const existing = await prisma.entity.findFirst({ where: { organizationId: org.id, name: e.name } });
+    ent[e.key] = existing ?? await prisma.entity.create({
+      data: { organizationId: org.id, name: e.name, type: e.type, contact: e.contact, status: 'Ativo' },
+    });
+  }
+  // Permissões (entidade → terminais que atende)
+  const permSpecs: [string, string[]][] = [
+    ['bombeiros', [terminal1.id, terminal2.id, terminal3.id]],
+    ['autoridade', [terminal1.id, terminal2.id]],
+    ['defesa', [terminal1.id, terminal3.id]],
+    ['ibama', [terminal2.id, terminal3.id]],
+  ];
+  for (const [key, terminalIds] of permSpecs) {
+    await prisma.permission.upsert({
+      where: { entityId: ent[key].id },
+      update: { terminalIds },
+      create: { entityId: ent[key].id, terminalIds },
+    });
+  }
+  // Regras de acionamento por tipo de ocorrência
+  const ruleSpecs: [string, string, boolean][] = [
+    ['Princípio de incêndio', 'bombeiros', true],
+    ['Princípio de incêndio', 'defesa', false],
+    ['Vazamento', 'ibama', true],
+    ['Vazamento', 'defesa', false],
+    ['Emergência', 'bombeiros', true],
+    ['Emergência', 'autoridade', true],
+    ['Emergência', 'defesa', true],
+    ['Emergência', 'ibama', false],
+    ['Explosão', 'bombeiros', true],
+    ['Explosão', 'defesa', true],
+    ['Contaminação ambiental', 'ibama', true],
+  ];
+  for (const [occurrenceType, key, mandatory] of ruleSpecs) {
+    const existing = await prisma.notificationRule.findFirst({
+      where: { organizationId: org.id, occurrenceType, entityId: ent[key].id },
+    });
+    if (!existing) {
+      await prisma.notificationRule.create({
+        data: { organizationId: org.id, occurrenceType, entityId: ent[key].id, mandatory },
+      });
+    }
+  }
+  console.log(`✅ Entidades: ${entitySpecs.length} · Permissões: ${permSpecs.length} · Regras: ${ruleSpecs.length}`);
 
   // ─── Usuários (perfis oficiais — Funcional §2.1 / DER §3.2) ─────────────────
   const hash = (senha: string) => bcrypt.hash(senha, 12);
