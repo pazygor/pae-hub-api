@@ -11,6 +11,10 @@ import { EntitiesModule } from './modules/entities/entities.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { NotificationRulesModule } from './modules/notification-rules/notification-rules.module';
 import { EntityNotificationsModule } from './modules/entity-notifications/entity-notifications.module';
+import { RisksModule } from './modules/risks/risks.module';
+import { EmergencyPlansModule } from './modules/emergency-plans/emergency-plans.module';
+import { MapElementsModule } from './modules/map-elements/map-elements.module';
+import { PaeDocumentsModule } from './modules/pae-documents/pae-documents.module';
 import { EmergencyModule } from './modules/emergency/emergency.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { WarRoomModule } from './modules/war-room/war-room.module';
@@ -36,6 +40,10 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     PermissionsModule,
     NotificationRulesModule,
     EntityNotificationsModule,
+    RisksModule,
+    EmergencyPlansModule,
+    MapElementsModule,
+    PaeDocumentsModule,
     EmergencyModule,
     AlertsModule,
     WarRoomModule,

@@ -104,10 +104,14 @@ model Organization {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  terminals   Terminal[]
-  users       User[]
-  entities    Entity[]
-  occurrences Occurrence[]
+  terminals      Terminal[]
+  users          User[]
+  entities       Entity[]
+  occurrences    Occurrence[]
+  risks          Risk[]
+  emergencyPlans EmergencyPlan[]
+  mapElements    MapElement[]
+  paeDocuments   PAEDocument[]
 
   @@map("organizations")
 }
@@ -152,6 +156,91 @@ model EntityNotification {
   @@index([occurrenceId])
   @@index([entityId])
   @@map("entity_notifications")
+}
+
+// ─── Fase 5a — Domínios de apoio à emergência (DER §6.1/§6.3) ────────────────
+// Vocabulários pt-BR validados na borda (src/domain/enums.ts).
+
+model Risk {
+  id             String   @id @default(uuid())
+  organizationId String
+  terminalId     String
+  type           String   @db.VarChar(100)
+  description    String   @db.Text
+  level          String   @default("médio") @db.VarChar(10) // baixo | médio | alto
+  affectedArea   String?  @db.VarChar(255)
+  date           DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  terminal     Terminal     @relation(fields: [terminalId], references: [id])
+
+  @@index([organizationId])
+  @@index([terminalId])
+  @@map("risks")
+}
+
+model EmergencyPlan {
+  id             String   @id @default(uuid())
+  organizationId String
+  terminalId     String
+  name           String   @db.VarChar(255)
+  description    String   @db.Text
+  responsible    String?  @db.VarChar(255)
+  // Checklist executável do template PAE: [{ text, done }]
+  checklist      Json     @default("[]")
+  status         String   @default("ativo") @db.VarChar(20) // ativo | inativo | em revisão
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  terminal     Terminal     @relation(fields: [terminalId], references: [id])
+
+  @@index([organizationId])
+  @@index([terminalId])
+  @@map("emergency_plans")
+}
+
+model MapElement {
+  id             String   @id @default(uuid())
+  organizationId String
+  terminalId     String
+  name           String   @db.VarChar(255)
+  layerType      String   @db.VarChar(30) // fire_equipment | hydrant | evacuation_route | risk_area | meeting_point
+  latitude       Float
+  longitude      Float
+  description    String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  terminal     Terminal     @relation(fields: [terminalId], references: [id])
+
+  @@index([organizationId])
+  @@index([terminalId])
+  @@map("map_elements")
+}
+
+// Biblioteca de documentos PAE (arquivo real na Fase 6 — hoje só metadados)
+model PAEDocument {
+  id             String   @id @default(uuid())
+  organizationId String
+  terminalId     String
+  title          String   @db.VarChar(255)
+  docType        String   @db.VarChar(50)
+  description    String?  @db.Text
+  fileName       String   @db.VarChar(255)
+  uploadedBy     String?  @db.VarChar(255)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  terminal     Terminal     @relation(fields: [terminalId], references: [id])
+
+  @@index([organizationId])
+  @@index([terminalId])
+  @@map("pae_documents")
 }
 
 // DER §6.1 — chat da ocorrência (Terminal ↔ Entidades). Decisão 2026-07-04:
@@ -214,10 +303,14 @@ model Terminal {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization  @relation(fields: [organizationId], references: [id])
-  users        User[]
-  occurrences  Occurrence[]
-  alerts       Alert[]
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  users          User[]
+  occurrences    Occurrence[]
+  alerts         Alert[]
+  risks          Risk[]
+  emergencyPlans EmergencyPlan[]
+  mapElements    MapElement[]
+  paeDocuments   PAEDocument[]
 
   @@unique([organizationId, code])
   @@map("terminals")

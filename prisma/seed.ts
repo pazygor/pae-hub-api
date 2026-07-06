@@ -287,6 +287,68 @@ async function main() {
   });
   console.log(`✅ Ocorrências de exemplo: ${occ1.incNumber}, ${occ2.incNumber}`);
 
+  // ─── Fase 5a — Riscos, Planos, Mapa e Documentos (idempotente por nome) ─────
+  const t = { t1: terminal1.id, t2: terminal2.id, t3: terminal3.id };
+
+  const riskSpecs = [
+    { terminalId: t.t1, type: 'Incêndio', description: 'Risco de incêndio em área de armazenamento de contêineres', level: 'alto', affectedArea: 'Pátio de contêineres', date: '2026-03-01' },
+    { terminalId: t.t2, type: 'Vazamento Químico', description: 'Possibilidade de vazamento em tanques de amônia', level: 'alto', affectedArea: 'Tanques 3 e 4', date: '2026-03-05' },
+    { terminalId: t.t1, type: 'Queda de carga', description: 'Risco de queda durante operação de guindastes', level: 'médio', affectedArea: 'Berço 101', date: '2026-03-10' },
+  ];
+  for (const r of riskSpecs) {
+    const exists = await prisma.risk.findFirst({ where: { organizationId: org.id, terminalId: r.terminalId, type: r.type } });
+    if (!exists) {
+      await prisma.risk.create({ data: { organizationId: org.id, ...r, date: new Date(r.date) } });
+    }
+  }
+
+  const planSpecs = [
+    { terminalId: t.t1, name: 'PAE Incêndio TECON', description: 'Plano de ação para combate a incêndios no terminal norte', responsible: 'Carlos Silva', checklist: [{ text: 'Acionar alarme', done: true }, { text: 'Evacuar área', done: false }, { text: 'Contatar bombeiros', done: false }], status: 'ativo' },
+    { terminalId: t.t2, name: 'PAE Vazamento Químico', description: 'Procedimentos em caso de vazamento de produtos químicos', responsible: 'Ana Paula Mendes', checklist: [{ text: 'Isolar área', done: true }, { text: 'Ativar sistema de contenção', done: true }, { text: 'Notificar IBAMA', done: false }], status: 'ativo' },
+  ];
+  for (const p of planSpecs) {
+    const exists = await prisma.emergencyPlan.findFirst({ where: { organizationId: org.id, name: p.name } });
+    if (!exists) {
+      await prisma.emergencyPlan.create({ data: { organizationId: org.id, ...p } });
+    }
+  }
+
+  const docSpecs = [
+    { terminalId: t.t1, title: 'PAE Incêndio - Terminal Norte', docType: 'Plano de Ação de Emergência', description: 'Plano completo de ação para combate a incêndios no TECON', fileName: 'pae-incendio-tecon.pdf', uploadedBy: 'Carlos Silva' },
+    { terminalId: t.t1, title: 'Rota de Evacuação - Cais 1', docType: 'Rotas de evacuação', description: 'Mapa de evacuação do berço 101 e áreas adjacentes', fileName: 'rota-evacuacao-cais1.pdf', uploadedBy: 'Carlos Silva' },
+    { terminalId: t.t2, title: 'Contatos de Emergência Atualizados', docType: 'Contatos de emergência', description: 'Lista de contatos de emergência do Terminal Químico Sul', fileName: 'contatos-emergencia-tqs.pdf', uploadedBy: 'Ana Paula Mendes' },
+    { terminalId: t.t2, title: 'Procedimento de Contenção Química', docType: 'Procedimentos operacionais', description: 'Procedimento padrão para contenção de vazamentos químicos', fileName: 'proc-contencao-quimica.pdf', uploadedBy: 'Ana Paula Mendes' },
+    { terminalId: t.t3, title: 'Planta Operacional - Granéis', docType: 'Plantas operacionais', description: 'Planta operacional do Terminal de Granéis Líquidos', fileName: 'planta-graneis.dwg', uploadedBy: 'Roberto Almeida' },
+  ];
+  for (const d of docSpecs) {
+    const exists = await prisma.pAEDocument.findFirst({ where: { organizationId: org.id, title: d.title } });
+    if (!exists) {
+      await prisma.pAEDocument.create({ data: { organizationId: org.id, ...d } });
+    }
+  }
+
+  const mapSpecs = [
+    { terminalId: t.t1, name: 'Extintor CO2 - Pátio A', layerType: 'fire_equipment', latitude: -23.9615, longitude: -46.3318, description: 'Extintor de CO2 próximo ao pátio de contêineres A3' },
+    { terminalId: t.t1, name: 'Extintor PQS - Berço 101', layerType: 'fire_equipment', latitude: -23.9622, longitude: -46.3326, description: 'Extintor de pó químico seco no berço 101' },
+    { terminalId: t.t1, name: 'Hidrante H-01', layerType: 'hydrant', latitude: -23.9612, longitude: -46.3330, description: 'Hidrante de coluna junto ao portão principal' },
+    { terminalId: t.t1, name: 'Hidrante H-02', layerType: 'hydrant', latitude: -23.9625, longitude: -46.3315, description: 'Hidrante subterrâneo no pátio de cargas' },
+    { terminalId: t.t1, name: 'Rota Evacuação Norte', layerType: 'evacuation_route', latitude: -23.9608, longitude: -46.3322, description: 'Rota de evacuação pela saída norte do terminal' },
+    { terminalId: t.t2, name: 'Área de Risco - Tanques', layerType: 'risk_area', latitude: -23.9718, longitude: -46.3275, description: 'Área de armazenamento de produtos químicos' },
+    { terminalId: t.t2, name: 'Área de Risco - Amônia', layerType: 'risk_area', latitude: -23.9725, longitude: -46.3285, description: 'Perímetro de segurança dos tanques de amônia' },
+    { terminalId: t.t1, name: 'Ponto de Encontro Alpha', layerType: 'meeting_point', latitude: -23.9605, longitude: -46.3335, description: 'Ponto de encontro principal para evacuação do TECON' },
+    { terminalId: t.t2, name: 'Ponto de Encontro Bravo', layerType: 'meeting_point', latitude: -23.9730, longitude: -46.3270, description: 'Ponto de encontro do Terminal Químico Sul' },
+    { terminalId: t.t3, name: 'Hidrante H-03', layerType: 'hydrant', latitude: -23.9548, longitude: -46.3395, description: 'Hidrante no acesso principal do terminal de granéis' },
+    { terminalId: t.t3, name: 'Extintor Espuma - Dique', layerType: 'fire_equipment', latitude: -23.9555, longitude: -46.3405, description: 'Extintor de espuma mecânica junto ao dique de contenção' },
+    { terminalId: t.t2, name: 'Rota Evacuação Cais 4', layerType: 'evacuation_route', latitude: -23.9715, longitude: -46.3290, description: 'Rota de evacuação pelo cais 4 do terminal químico' },
+  ];
+  for (const el of mapSpecs) {
+    const exists = await prisma.mapElement.findFirst({ where: { organizationId: org.id, name: el.name } });
+    if (!exists) {
+      await prisma.mapElement.create({ data: { organizationId: org.id, ...el } });
+    }
+  }
+  console.log(`✅ 5a: ${riskSpecs.length} riscos · ${planSpecs.length} planos · ${docSpecs.length} documentos · ${mapSpecs.length} elementos de mapa`);
+
   // ─── Sample Alerts ────────────────────────────────────────────────────────
   await prisma.alert.createMany({
     data: [
