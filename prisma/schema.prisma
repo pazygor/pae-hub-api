@@ -124,12 +124,50 @@ model Entity {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization      Organization       @relation(fields: [organizationId], references: [id])
-  permission        Permission?
-  notificationRules NotificationRule[]
+  organization        Organization         @relation(fields: [organizationId], references: [id])
+  permission          Permission?
+  notificationRules   NotificationRule[]
+  entityNotifications EntityNotification[]
 
   @@index([organizationId])
   @@map("entities")
+}
+
+// DER §6.3 — notificação DISPARADA numa ocorrência (operacional, Fase 3).
+// Criada automaticamente ao abrir ocorrência: NotificationRule (tipo) × Permission (terminal).
+model EntityNotification {
+  id           String    @id @default(uuid())
+  occurrenceId String
+  entityId     String
+  status       String    @default("Notificada") @db.VarChar(20) // Notificada | Confirmada | Pendente | Em Atendimento
+  mandatory    Boolean   @default(false)
+  confirmedAt  DateTime?
+  respondingAt DateTime?
+  dispatchedBy String?   @db.VarChar(255)
+  createdAt    DateTime  @default(now())
+
+  occurrence Occurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  entity     Entity     @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([occurrenceId])
+  @@index([entityId])
+  @@map("entity_notifications")
+}
+
+// DER §6.1 — chat da ocorrência (Terminal ↔ Entidades). Decisão 2026-07-04:
+// modelo próprio conforme o DER, sem reaproveitar WarRoomMessage.
+model ChatMessage {
+  id           String   @id @default(uuid())
+  occurrenceId String
+  userId       String
+  message      String   @db.Text
+  createdAt    DateTime @default(now())
+
+  occurrence Occurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id])
+
+  @@index([occurrenceId])
+  @@map("chat_messages")
 }
 
 model Permission {
@@ -216,6 +254,7 @@ model User {
   refreshTokens        RefreshToken[]
   reportedOccurrences  Occurrence[]         @relation("ReportedBy")
   timelineEvents       OccurrenceTimeline[]
+  chatMessages         ChatMessage[]
   warRoomParticipants  WarRoomParticipant[]
   warRoomMessages      WarRoomMessage[]
   warRoomDecisions     WarRoomDecision[]
@@ -293,12 +332,14 @@ model Occurrence {
   terminal     Terminal     @relation(fields: [terminalId], references: [id])
   reportedBy   User         @relation("ReportedBy", fields: [reportedByUserId], references: [id])
 
-  timeline   OccurrenceTimeline[]
-  evidences  Evidence[]
-  alerts     Alert[]
-  warRooms   WarRoom[]
-  checklist  ChecklistItem[]
-  aiInsights AgentInsight[]
+  timeline            OccurrenceTimeline[]
+  evidences           Evidence[]
+  alerts              Alert[]
+  warRooms            WarRoom[]
+  checklist           ChecklistItem[]
+  aiInsights          AgentInsight[]
+  entityNotifications EntityNotification[]
+  chatMessages        ChatMessage[]
 
   @@unique([organizationId, incNumber])
   @@index([organizationId])

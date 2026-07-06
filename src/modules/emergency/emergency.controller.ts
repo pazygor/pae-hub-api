@@ -9,6 +9,7 @@ import {
   CreateChecklistItemDto,
   UpdateChecklistItemDto,
   CreateEvidenceDto,
+  CreateChatMessageDto,
   OccurrenceQueryDto,
 } from './dto/occurrence.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -87,6 +88,18 @@ export class EmergencyController {
   @ApiOperation({ summary: 'Registrar evidência (só metadados — upload real na Fase 6)' })
   addEvidence(@Param('id') id: string, @Body() dto: CreateEvidenceDto, @CurrentUser() user: any) {
     return this.service.addEvidence(id, dto, user);
+  }
+
+  @Get(':id/chat')
+  @ApiOperation({ summary: 'Mensagens do chat da ocorrência (ChatMessage — DER)' })
+  getChatMessages(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.service.getChatMessages(id, user);
+  }
+
+  @Post(':id/chat')
+  @ApiOperation({ summary: 'Enviar mensagem no chat (Terminal ↔ Entidades)' })
+  addChatMessage(@Param('id') id: string, @Body() dto: CreateChatMessageDto, @CurrentUser() user: any) {
+    return this.service.addChatMessage(id, dto, user);
   }
 
   @Delete(':id')

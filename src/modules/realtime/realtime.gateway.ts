@@ -34,6 +34,13 @@ export enum CopEventType {
   WAR_ROOM_DECISION = 'warroom:decision',
   WAR_ROOM_CLOSED = 'warroom:closed',
 
+  // Fase 3 — timeline/checklist/acionamento/chat da ocorrência
+  TIMELINE_ADDED = 'timeline:added',
+  CHECKLIST_UPDATED = 'checklist:updated',
+  NOTIFICATION_CREATED = 'notification:created',
+  NOTIFICATION_UPDATED = 'notification:updated',
+  CHAT_MESSAGE = 'chat:message',
+
   // KPIs
   KPI_UPDATE = 'kpi:update',
 

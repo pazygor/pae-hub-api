@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RealtimeGateway, CopEventType } from '../realtime/realtime.gateway';
 import { OCCURRENCE_CHECKLIST_TEMPLATE } from '../../domain/enums';
 import {
   CreateOccurrenceDto,
@@ -9,16 +10,22 @@ import {
   CreateChecklistItemDto,
   UpdateChecklistItemDto,
   CreateEvidenceDto,
+  CreateChatMessageDto,
   OccurrenceQueryDto,
 } from './dto/occurrence.dto';
 
 // Fase 2 — vocabulário pt-BR do DER (§6.3), INC-#### sequencial por organização,
 // timeline imutável (só INSERT), checklist de 8 passos semeado na criação.
+// Fase 3 — acionamento automático (NotificationRule × Permission), chat da
+// ocorrência (ChatMessage do DER) e eventos em tempo real via RealtimeGateway.
 @Injectable()
 export class EmergencyService {
   private readonly logger = new Logger(EmergencyService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private realtime: RealtimeGateway,
+  ) {}
 
   async findAll(query: OccurrenceQueryDto, user: any) {
     const { status, criticality, type, terminalId, search, page = 1, limit = 50 } = query;
@@ -124,7 +131,76 @@ export class EmergencyService {
     });
 
     this.logger.log(`Occurrence ${occurrence.incNumber} created by ${user.email}`);
-    return this.formatOccurrenceDetail(occurrence);
+
+    // Fase 3 (Funcional §4.1): acionamento automático das entidades cujas regras
+    // casam com o tipo E que atendem o terminal (Permission).
+    await this.autoDispatchEntities(occurrence, user);
+
+    const result = this.formatOccurrenceDetail(
+      await this.prisma.occurrence.findUnique({
+        where: { id: occurrence.id },
+        include: {
+          terminal: { select: { id: true, name: true } },
+          timeline: { orderBy: { createdAt: 'asc' }, include: { user: { select: { name: true } } } },
+          checklist: { orderBy: { order: 'asc' } },
+        },
+      }),
+    );
+
+    this.realtime.emitToOrganization(user.organizationId, CopEventType.OCCURRENCE_CREATED, {
+      occurrenceId: occurrence.id,
+      incNumber: occurrence.incNumber,
+      status: occurrence.status,
+    });
+
+    return result;
+  }
+
+  /** Cruza NotificationRule (tipo de ocorrência) × Permission (terminal) e cria
+   *  as EntityNotifications + eventos 'entidade notificada' na timeline. */
+  private async autoDispatchEntities(
+    occurrence: { id: string; type: string; terminalId: string; organizationId: string },
+    user: any,
+  ) {
+    const rules = await this.prisma.notificationRule.findMany({
+      where: { organizationId: occurrence.organizationId, occurrenceType: occurrence.type },
+      include: { entity: { select: { id: true, name: true, contact: true, status: true, permission: true } } },
+    });
+
+    const applicable = rules.filter(
+      (r) =>
+        r.entity.status === 'Ativo' &&
+        (r.entity.permission?.terminalIds ?? []).includes(occurrence.terminalId),
+    );
+
+    for (const rule of applicable) {
+      await this.prisma.entityNotification.create({
+        data: {
+          occurrenceId: occurrence.id,
+          entityId: rule.entityId,
+          status: 'Notificada',
+          mandatory: rule.mandatory,
+          dispatchedBy: 'Sistema',
+        },
+      });
+      await this.prisma.occurrenceTimeline.create({
+        data: {
+          occurrenceId: occurrence.id,
+          userId: user.id,
+          eventType: 'entidade notificada',
+          description: `${rule.entity.name} notificada automaticamente${rule.entity.contact ? ` via ${rule.entity.contact}` : ''}${rule.mandatory ? ' [OBRIGATÓRIA]' : ''}`,
+        },
+      });
+      this.realtime.emitToOrganization(occurrence.organizationId, CopEventType.NOTIFICATION_CREATED, {
+        occurrenceId: occurrence.id,
+        entityId: rule.entityId,
+        mandatory: rule.mandatory,
+      });
+    }
+
+    if (applicable.length > 0) {
+      this.logger.log(`Occurrence ${occurrence.id}: ${applicable.length} entidade(s) acionada(s) automaticamente`);
+    }
   }
 
   async update(id: string, dto: UpdateOccurrenceDto, user: any) {
@@ -173,6 +249,11 @@ export class EmergencyService {
       },
     });
 
+    this.realtime.emitToOrganization(occurrence.organizationId, CopEventType.OCCURRENCE_STATUS_CHANGED, {
+      occurrenceId: id,
+      status: dto.status,
+    });
+
     return this.formatOccurrence(updated);
   }
 
@@ -193,7 +274,44 @@ export class EmergencyService {
       include: { user: { select: { name: true } } },
     });
 
+    this.realtime.emitToOrganization(occurrence.organizationId, CopEventType.TIMELINE_ADDED, {
+      occurrenceId: id,
+      type: dto.type,
+    });
+
     return this.formatTimelineEvent(event);
+  }
+
+  // ── Chat da ocorrência (ChatMessage — DER §6.1, Fase 3) ────────────────────
+
+  async getChatMessages(id: string, user: any) {
+    const occurrence = await this.findOneRaw(id);
+    await this.checkTenantAccess(occurrence, user);
+
+    const messages = await this.prisma.chatMessage.findMany({
+      where: { occurrenceId: id },
+      orderBy: { createdAt: 'asc' },
+      include: { user: { select: { name: true, role: true } } },
+    });
+
+    return messages.map((m) => this.formatChatMessage(m));
+  }
+
+  async addChatMessage(id: string, dto: CreateChatMessageDto, user: any) {
+    const occurrence = await this.findOneRaw(id);
+    await this.checkTenantAccess(occurrence, user);
+
+    const message = await this.prisma.chatMessage.create({
+      data: { occurrenceId: id, userId: user.id, message: dto.message },
+      include: { user: { select: { name: true, role: true } } },
+    });
+
+    this.realtime.emitToOrganization(occurrence.organizationId, CopEventType.CHAT_MESSAGE, {
+      occurrenceId: id,
+      messageId: message.id,
+    });
+
+    return this.formatChatMessage(message);
   }
 
   // ── Checklist ──────────────────────────────────────────────────────────────
@@ -229,6 +347,12 @@ export class EmergencyService {
         completedAt: dto.done ? new Date() : null,
         completedBy: dto.done ? user.name : null,
       },
+    });
+
+    this.realtime.emitToOrganization(occurrence.organizationId, CopEventType.CHECKLIST_UPDATED, {
+      occurrenceId: id,
+      itemId,
+      done: dto.done,
     });
 
     return this.formatChecklistItem(updated);
@@ -376,6 +500,18 @@ export class EmergencyService {
       type: e.type,
       description: e.description ?? undefined,
       createdAt: e.createdAt,
+    };
+  }
+
+  private formatChatMessage(m: any) {
+    return {
+      id: m.id,
+      occurrenceId: m.occurrenceId,
+      userId: m.userId,
+      userName: m.user?.name ?? '—',
+      userRole: m.user?.role ?? 'terminal',
+      message: m.message,
+      dateTime: m.createdAt,
     };
   }
 }

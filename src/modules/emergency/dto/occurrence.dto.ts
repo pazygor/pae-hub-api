@@ -107,6 +107,12 @@ export class CreateEvidenceDto {
   description?: string;
 }
 
+export class CreateChatMessageDto {
+  @ApiProperty()
+  @IsString() @IsNotEmpty()
+  message!: string;
+}
+
 export class OccurrenceQueryDto {
   @ApiPropertyOptional({ enum: OCCURRENCE_STATUS })
   @IsOptional() @IsIn([...OCCURRENCE_STATUS])
