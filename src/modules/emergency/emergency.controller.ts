@@ -1,7 +1,16 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { EmergencyService } from './emergency.service';
-import { CreateOccurrenceDto, UpdateOccurrenceDto, UpdateOccurrenceStatusDto, OccurrenceQueryDto } from './dto/occurrence.dto';
+import {
+  CreateOccurrenceDto,
+  UpdateOccurrenceDto,
+  UpdateOccurrenceStatusDto,
+  CreateTimelineEventDto,
+  CreateChecklistItemDto,
+  UpdateChecklistItemDto,
+  CreateEvidenceDto,
+  OccurrenceQueryDto,
+} from './dto/occurrence.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -21,30 +30,63 @@ export class EmergencyController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Buscar ocorrência por ID com timeline e evidências' })
+  @ApiOperation({ summary: 'Buscar ocorrência por ID com timeline, checklist e evidências' })
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
     return this.service.findOne(id, user);
   }
 
   @Post()
   @Roles('admin', 'terminal')
-  @ApiOperation({ summary: 'Criar nova ocorrência' })
+  @ApiOperation({ summary: 'Criar ocorrência (INC-#### sequencial + checklist de 8 passos)' })
   create(@Body() dto: CreateOccurrenceDto, @CurrentUser() user: any) {
     return this.service.create(dto, user);
   }
 
   @Put(':id')
   @Roles('admin', 'terminal')
-  @ApiOperation({ summary: 'Atualizar ocorrência' })
+  @ApiOperation({ summary: 'Atualizar dados da ocorrência' })
   update(@Param('id') id: string, @Body() dto: UpdateOccurrenceDto, @CurrentUser() user: any) {
     return this.service.update(id, dto, user);
   }
 
   @Put(':id/status')
   @Roles('admin', 'terminal')
-  @ApiOperation({ summary: 'Atualizar status da ocorrência' })
+  @ApiOperation({ summary: 'Atualizar status (gera evento na timeline; resolvido grava resolvedAt)' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdateOccurrenceStatusDto, @CurrentUser() user: any) {
     return this.service.updateStatus(id, dto, user);
+  }
+
+  @Post(':id/timeline')
+  @Roles('admin', 'terminal')
+  @ApiOperation({ summary: 'Registrar evento na timeline imutável (DER §6.3)' })
+  addTimelineEvent(@Param('id') id: string, @Body() dto: CreateTimelineEventDto, @CurrentUser() user: any) {
+    return this.service.addTimelineEvent(id, dto, user);
+  }
+
+  @Post(':id/checklist')
+  @Roles('admin', 'terminal')
+  @ApiOperation({ summary: 'Adicionar item ao checklist da ocorrência' })
+  addChecklistItem(@Param('id') id: string, @Body() dto: CreateChecklistItemDto, @CurrentUser() user: any) {
+    return this.service.addChecklistItem(id, dto, user);
+  }
+
+  @Put(':id/checklist/:itemId')
+  @Roles('admin', 'terminal')
+  @ApiOperation({ summary: 'Marcar/desmarcar item do checklist' })
+  updateChecklistItem(
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateChecklistItemDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.updateChecklistItem(id, itemId, dto, user);
+  }
+
+  @Post(':id/evidences')
+  @Roles('admin', 'terminal')
+  @ApiOperation({ summary: 'Registrar evidência (só metadados — upload real na Fase 6)' })
+  addEvidence(@Param('id') id: string, @Body() dto: CreateEvidenceDto, @CurrentUser() user: any) {
+    return this.service.addEvidence(id, dto, user);
   }
 
   @Delete(':id')

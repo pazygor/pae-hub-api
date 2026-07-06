@@ -1,40 +1,39 @@
-import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { OccurrenceStatus, TimelineEventType } from '@prisma/client';
+import { OCCURRENCE_CHECKLIST_TEMPLATE } from '../../domain/enums';
 import {
   CreateOccurrenceDto,
   UpdateOccurrenceDto,
   UpdateOccurrenceStatusDto,
+  CreateTimelineEventDto,
+  CreateChecklistItemDto,
+  UpdateChecklistItemDto,
+  CreateEvidenceDto,
   OccurrenceQueryDto,
 } from './dto/occurrence.dto';
 
+// Fase 2 — vocabulário pt-BR do DER (§6.3), INC-#### sequencial por organização,
+// timeline imutável (só INSERT), checklist de 8 passos semeado na criação.
 @Injectable()
 export class EmergencyService {
   private readonly logger = new Logger(EmergencyService.name);
-  private occurrenceCounter = 0;
 
   constructor(private prisma: PrismaService) {}
 
   async findAll(query: OccurrenceQueryDto, user: any) {
-    const { status, severity, type, terminalId, search, page = 1, limit = 20 } = query;
+    const { status, criticality, type, terminalId, search, page = 1, limit = 50 } = query;
     const skip = (Number(page) - 1) * Number(limit);
 
-    const where: any = { isActive: true };
+    const where: any = { isActive: true, ...(await this.tenantWhere(user)) };
 
-    // Tenant isolation: non-admins see only their terminal
-    if (user.role !== 'admin') {
-      where.terminalId = user.terminalId;
-    } else if (terminalId && terminalId !== 'all') {
-      where.terminalId = terminalId;
-    }
-
+    if (terminalId && terminalId !== 'all') where.terminalId = terminalId;
     if (status) where.status = status;
-    if (severity) where.severity = severity;
-    if (type) where.type = type;
+    if (criticality) where.criticality = criticality;
+    if (type) where.type = { contains: type, mode: 'insensitive' };
     if (search) {
       where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { code: { contains: search, mode: 'insensitive' } },
+        { incNumber: { contains: search, mode: 'insensitive' } },
+        { type: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
       ];
     }
@@ -47,17 +46,14 @@ export class EmergencyService {
         orderBy: { createdAt: 'desc' },
         include: {
           terminal: { select: { id: true, name: true } },
-          emergencyType: { select: { id: true, name: true } },
-          reportedBy: { select: { id: true, name: true } },
-          assignedTo: { select: { id: true, name: true } },
-          _count: { select: { alerts: true, warRooms: true, evidences: true } },
+          timeline: { orderBy: { createdAt: 'asc' }, include: { user: { select: { name: true } } } },
         },
       }),
       this.prisma.occurrence.count({ where }),
     ]);
 
     return {
-      data: items.map(this.formatOccurrence),
+      data: items.map((o) => this.formatOccurrence(o)),
       meta: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / Number(limit)) },
     };
   }
@@ -66,103 +62,97 @@ export class EmergencyService {
     const occurrence = await this.prisma.occurrence.findUnique({
       where: { id },
       include: {
-        terminal: { select: { id: true, name: true } },
-        emergencyType: { select: { id: true, name: true } },
-        reportedBy: { select: { id: true, name: true, avatarUrl: true } },
-        assignedTo: { select: { id: true, name: true, avatarUrl: true } },
-        timeline: {
-          orderBy: { createdAt: 'asc' },
-          include: { user: { select: { id: true, name: true } } },
-        },
-        evidences: { orderBy: { createdAt: 'desc' } },
+        terminal: { select: { id: true, name: true, latitude: true, longitude: true } },
+        reportedBy: { select: { id: true, name: true } },
+        timeline: { orderBy: { createdAt: 'asc' }, include: { user: { select: { name: true } } } },
         checklist: { orderBy: { order: 'asc' } },
-        alerts: { where: { status: 'ACTIVE' }, take: 5 },
-        warRooms: { where: { status: 'ACTIVE' }, take: 1 },
-        _count: { select: { alerts: true, warRooms: true, evidences: true } },
+        evidences: { orderBy: { createdAt: 'desc' } },
       },
     });
 
     if (!occurrence) throw new NotFoundException(`Ocorrência ${id} não encontrada`);
-    this.checkTenantAccess(occurrence, user);
+    await this.checkTenantAccess(occurrence, user);
 
     return this.formatOccurrenceDetail(occurrence);
   }
 
   async create(dto: CreateOccurrenceDto, user: any) {
-    const terminalId = dto.terminalId || user.terminalId;
-    if (!terminalId) throw new ForbiddenException('Terminal não identificado');
+    const terminalId = user.role === 'admin' ? dto.terminalId : (user.terminalId ?? dto.terminalId);
+    if (!terminalId) throw new BadRequestException('Terminal não informado');
 
-    const code = await this.generateCode();
+    // Terminal precisa existir e pertencer à organização do usuário
+    const terminal = await this.prisma.terminal.findFirst({
+      where: { id: terminalId, organizationId: user.organizationId },
+    });
+    if (!terminal) throw new ForbiddenException('Terminal inválido para esta organização');
+
+    const incNumber = await this.nextIncNumber(user.organizationId);
 
     const occurrence = await this.prisma.occurrence.create({
       data: {
-        code,
+        organizationId: user.organizationId,
+        incNumber,
         terminalId,
-        title: dto.title,
+        type: dto.type,
         description: dto.description,
-        type: dto.type || 'OPERATIONAL',
-        severity: dto.severity || 'MEDIUM',
-        criticality: dto.criticality || 'URGENT',
-        status: 'OPEN',
+        status: dto.status ?? 'aberto',
+        criticality: dto.criticality ?? 'média',
+        severity: dto.severity,
+        responsible: dto.responsible ?? user.name,
+        team: dto.team,
         location: dto.location,
         latitude: dto.latitude,
         longitude: dto.longitude,
-        emergencyTypeId: dto.emergencyTypeId,
         reportedByUserId: user.id,
-        assignedToUserId: dto.assignedToUserId,
-        slaDeadline: this.calculateSlaDeadline(dto.criticality || 'URGENT'),
         timeline: {
           create: {
             userId: user.id,
-            eventType: TimelineEventType.CREATED,
-            description: `Ocorrência criada por ${user.name}`,
+            eventType: 'ocorrência registrada',
+            description: dto.description,
           },
+        },
+        // Funcional §3.3: checklist de 8 passos nasce com a ocorrência
+        checklist: {
+          create: OCCURRENCE_CHECKLIST_TEMPLATE.map((text, i) => ({ title: text, order: i })),
         },
       },
       include: {
         terminal: { select: { id: true, name: true } },
-        reportedBy: { select: { id: true, name: true } },
+        timeline: { orderBy: { createdAt: 'asc' }, include: { user: { select: { name: true } } } },
+        checklist: { orderBy: { order: 'asc' } },
       },
     });
 
-    this.logger.log(`Occurrence ${occurrence.code} created by ${user.email}`);
-    return this.formatOccurrence(occurrence as any);
+    this.logger.log(`Occurrence ${occurrence.incNumber} created by ${user.email}`);
+    return this.formatOccurrenceDetail(occurrence);
   }
 
   async update(id: string, dto: UpdateOccurrenceDto, user: any) {
     const occurrence = await this.findOneRaw(id);
-    this.checkTenantAccess(occurrence, user);
+    await this.checkTenantAccess(occurrence, user);
+
+    // terminalId/status têm fluxos próprios — não passam pelo update genérico
+    const { terminalId: _t, status: _s, ...fields } = dto;
 
     const updated = await this.prisma.occurrence.update({
       where: { id },
-      data: {
-        ...dto,
-        updatedAt: new Date(),
-        timeline: {
-          create: {
-            userId: user.id,
-            eventType: TimelineEventType.COMMENT,
-            description: `Ocorrência atualizada por ${user.name}`,
-          },
-        },
-      },
+      data: { ...fields, updatedAt: new Date() },
       include: {
         terminal: { select: { id: true, name: true } },
-        reportedBy: { select: { id: true, name: true } },
-        assignedTo: { select: { id: true, name: true } },
+        timeline: { orderBy: { createdAt: 'asc' }, include: { user: { select: { name: true } } } },
       },
     });
 
-    return this.formatOccurrence(updated as any);
+    return this.formatOccurrence(updated);
   }
 
   async updateStatus(id: string, dto: UpdateOccurrenceStatusDto, user: any) {
     const occurrence = await this.findOneRaw(id);
-    this.checkTenantAccess(occurrence, user);
+    await this.checkTenantAccess(occurrence, user);
 
+    const resolved = dto.status === 'resolvido';
     const data: any = { status: dto.status, updatedAt: new Date() };
-    if (dto.status === 'RESOLVED') data.resolvedAt = new Date();
-    if (dto.status === 'CLOSED') data.closedAt = new Date();
+    if (resolved) data.resolvedAt = new Date();
 
     const updated = await this.prisma.occurrence.update({
       where: { id },
@@ -171,27 +161,150 @@ export class EmergencyService {
         timeline: {
           create: {
             userId: user.id,
-            eventType: TimelineEventType.STATUS_CHANGED,
-            description: dto.comment || `Status alterado para ${dto.status} por ${user.name}`,
+            eventType: resolved ? 'ocorrência resolvida' : 'atualização de status',
+            description: dto.comment || `Status alterado de "${occurrence.status}" para "${dto.status}"`,
             metadata: { previousStatus: occurrence.status, newStatus: dto.status },
           },
         },
       },
+      include: {
+        terminal: { select: { id: true, name: true } },
+        timeline: { orderBy: { createdAt: 'asc' }, include: { user: { select: { name: true } } } },
+      },
     });
 
-    return updated;
+    return this.formatOccurrence(updated);
+  }
+
+  // ── Timeline (imutável — só INSERT) ────────────────────────────────────────
+
+  async addTimelineEvent(id: string, dto: CreateTimelineEventDto, user: any) {
+    const occurrence = await this.findOneRaw(id);
+    await this.checkTenantAccess(occurrence, user);
+
+    const event = await this.prisma.occurrenceTimeline.create({
+      data: {
+        occurrenceId: id,
+        userId: user.id,
+        eventType: dto.type,
+        description: dto.description,
+        attachment: dto.attachment,
+      },
+      include: { user: { select: { name: true } } },
+    });
+
+    return this.formatTimelineEvent(event);
+  }
+
+  // ── Checklist ──────────────────────────────────────────────────────────────
+
+  async addChecklistItem(id: string, dto: CreateChecklistItemDto, user: any) {
+    const occurrence = await this.findOneRaw(id);
+    await this.checkTenantAccess(occurrence, user);
+
+    const last = await this.prisma.checklistItem.findFirst({
+      where: { occurrenceId: id },
+      orderBy: { order: 'desc' },
+      select: { order: true },
+    });
+
+    const item = await this.prisma.checklistItem.create({
+      data: { occurrenceId: id, title: dto.text, order: (last?.order ?? -1) + 1 },
+    });
+
+    return this.formatChecklistItem(item);
+  }
+
+  async updateChecklistItem(id: string, itemId: string, dto: UpdateChecklistItemDto, user: any) {
+    const occurrence = await this.findOneRaw(id);
+    await this.checkTenantAccess(occurrence, user);
+
+    const item = await this.prisma.checklistItem.findFirst({ where: { id: itemId, occurrenceId: id } });
+    if (!item) throw new NotFoundException(`Item de checklist ${itemId} não encontrado`);
+
+    const updated = await this.prisma.checklistItem.update({
+      where: { id: itemId },
+      data: {
+        isCompleted: dto.done,
+        completedAt: dto.done ? new Date() : null,
+        completedBy: dto.done ? user.name : null,
+      },
+    });
+
+    return this.formatChecklistItem(updated);
+  }
+
+  // ── Evidências (só metadados na Fase 2 — upload real na Fase 6) ─────────────
+
+  async addEvidence(id: string, dto: CreateEvidenceDto, user: any) {
+    const occurrence = await this.findOneRaw(id);
+    await this.checkTenantAccess(occurrence, user);
+
+    const evidence = await this.prisma.evidence.create({
+      data: {
+        occurrenceId: id,
+        uploadedById: user.id,
+        type: dto.type ?? 'documento',
+        filename: dto.filename,
+        description: dto.description,
+      },
+    });
+
+    return this.formatEvidence(evidence);
   }
 
   async remove(id: string, user: any) {
     const occurrence = await this.findOneRaw(id);
-    this.checkTenantAccess(occurrence, user);
+    await this.checkTenantAccess(occurrence, user);
 
-    await this.prisma.occurrence.update({
-      where: { id },
-      data: { isActive: false },
-    });
-
+    await this.prisma.occurrence.update({ where: { id }, data: { isActive: false } });
     return { message: 'Ocorrência removida com sucesso' };
+  }
+
+  // ── Internos ────────────────────────────────────────────────────────────────
+
+  /** INC-#### atômico por organização (contador `occurrenceSeq`). */
+  private async nextIncNumber(organizationId: string): Promise<string> {
+    const org = await this.prisma.organization.update({
+      where: { id: organizationId },
+      data: { occurrenceSeq: { increment: 1 } },
+      select: { occurrenceSeq: true },
+    });
+    return `INC-${String(org.occurrenceSeq).padStart(4, '0')}`;
+  }
+
+  /** Escopo multi-tenant: admin→organização; terminal→próprio terminal; entity→terminais permitidos. */
+  private async tenantWhere(user: any): Promise<Record<string, any>> {
+    if (user.role === 'admin') return { organizationId: user.organizationId };
+    if (user.role === 'terminal') return { terminalId: user.terminalId ?? '—' };
+    // entity: allowedTerminals do cadastro (refinado com Permission na Fase 3)
+    const dbUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { allowedTerminals: true },
+    });
+    return { terminalId: { in: dbUser?.allowedTerminals ?? [] } };
+  }
+
+  private async checkTenantAccess(occurrence: any, user: any) {
+    if (user.role === 'admin') {
+      if (occurrence.organizationId !== user.organizationId) {
+        throw new ForbiddenException('Acesso negado a este recurso');
+      }
+      return;
+    }
+    if (user.role === 'terminal') {
+      if (occurrence.terminalId !== user.terminalId) {
+        throw new ForbiddenException('Acesso negado a este recurso');
+      }
+      return;
+    }
+    const dbUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { allowedTerminals: true },
+    });
+    if (!dbUser?.allowedTerminals?.includes(occurrence.terminalId)) {
+      throw new ForbiddenException('Acesso negado a este recurso');
+    }
   }
 
   private async findOneRaw(id: string) {
@@ -200,78 +313,69 @@ export class EmergencyService {
     return occurrence;
   }
 
-  private checkTenantAccess(occurrence: any, user: any) {
-    if (user.role === 'admin') return;
-    if (occurrence.terminalId !== user.terminalId) {
-      throw new ForbiddenException('Acesso negado a este recurso');
-    }
-  }
-
-  private async generateCode(): Promise<string> {
-    const year = new Date().getFullYear();
-    const count = await this.prisma.occurrence.count({
-      where: { code: { startsWith: `OCC-${year}-` } },
-    });
-    return `OCC-${year}-${String(count + 1).padStart(4, '0')}`;
-  }
-
-  private calculateSlaDeadline(criticality: string): Date {
-    const slaHours: Record<string, number> = {
-      CRISIS: 1, EMERGENCY: 4, URGENT: 24, ROUTINE: 72,
-    };
-    const hours = slaHours[criticality] ?? 24;
-    const deadline = new Date();
-    deadline.setHours(deadline.getHours() + hours);
-    return deadline;
-  }
+  // ── Formatação (shape alinhado ao front — pae-app/src/lib/types.ts) ────────
 
   private formatOccurrence(o: any) {
     return {
       id: o.id,
-      code: o.code,
-      title: o.title,
-      description: o.description,
-      type: o.type,
-      severity: o.severity,
-      criticality: o.criticality,
-      status: o.status,
-      location: o.location,
+      incNumber: o.incNumber,
       terminalId: o.terminalId,
       terminalName: o.terminal?.name,
-      emergencyTypeId: o.emergencyTypeId,
-      emergencyTypeName: o.emergencyType?.name,
-      reportedByUserId: o.reportedByUserId,
-      reportedByUserName: o.reportedBy?.name,
-      assignedToUserId: o.assignedToUserId,
-      assignedToUserName: o.assignedTo?.name,
-      alertCount: o._count?.alerts ?? 0,
-      participantCount: o._count?.warRooms ?? 0,
-      evidenceCount: o._count?.evidences ?? 0,
-      slaDeadline: o.slaDeadline,
-      isActive: o.isActive,
+      dateTime: o.createdAt,
+      type: o.type,
+      description: o.description,
+      status: o.status,
+      criticality: o.criticality,
+      severity: o.severity ?? undefined,
+      responsible: o.responsible ?? '',
+      team: o.team ?? '',
+      location: o.location ?? undefined,
+      latitude: o.latitude ?? undefined,
+      longitude: o.longitude ?? undefined,
+      timeline: o.timeline?.map((t: any) => this.formatTimelineEvent(t)) ?? [],
       createdAt: o.createdAt,
       updatedAt: o.updatedAt,
       resolvedAt: o.resolvedAt,
-      closedAt: o.closedAt,
     };
   }
 
   private formatOccurrenceDetail(o: any) {
     return {
       ...this.formatOccurrence(o),
-      timeline: o.timeline?.map((t: any) => ({
-        id: t.id,
-        eventType: t.eventType,
-        description: t.description,
-        metadata: t.metadata,
-        userId: t.userId,
-        userName: t.user?.name,
-        createdAt: t.createdAt,
-      })),
-      evidences: o.evidences,
-      checklist: o.checklist,
-      activeAlerts: o.alerts,
-      activeWarRoom: o.warRooms?.[0] ?? null,
+      checklist: o.checklist?.map((c: any) => this.formatChecklistItem(c)) ?? [],
+      evidences: o.evidences?.map((e: any) => this.formatEvidence(e)) ?? [],
+    };
+  }
+
+  private formatTimelineEvent(t: any) {
+    return {
+      id: t.id,
+      dateTime: t.createdAt,
+      type: t.eventType,
+      description: t.description,
+      userName: t.user?.name ?? 'Sistema',
+      attachment: t.attachment ?? undefined,
+    };
+  }
+
+  private formatChecklistItem(c: any) {
+    return {
+      id: c.id,
+      text: c.title,
+      done: c.isCompleted,
+      completedAt: c.completedAt ?? undefined,
+      completedBy: c.completedBy ?? undefined,
+      order: c.order,
+    };
+  }
+
+  private formatEvidence(e: any) {
+    return {
+      id: e.id,
+      filename: e.filename,
+      type: e.type,
+      description: e.description ?? undefined,
+      createdAt: e.createdAt,
     };
   }
 }

@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { OccurrenceStatus, AlertStatus, SafetyItemStatus } from '@prisma/client';
+import { AlertStatus, SafetyItemStatus } from '@prisma/client';
 
+// Fase 2: KPIs/indicadores calculados sobre o vocabulário pt-BR do DER
+// ('aberto' | 'em atendimento' | 'emergência ativa' | 'resolvido').
 @Injectable()
 export class DashboardService {
   private readonly logger = new Logger(DashboardService.name);
@@ -13,6 +15,7 @@ export class DashboardService {
     const alertWhere: any = {};
     const safetyWhere: any = {};
 
+    if (organizationId) occurrenceWhere.organizationId = organizationId;
     if (terminalId) {
       occurrenceWhere.terminalId = terminalId;
       alertWhere.terminalId = terminalId;
@@ -27,48 +30,41 @@ export class DashboardService {
     const [
       totalOccurrences,
       openOccurrences,
+      activeEmergencies,
       criticalOccurrences,
       resolvedLast24h,
       newLast24h,
       activeAlerts,
-      criticalAlerts,
       overdueItems,
       occurrencesByStatus,
-      occurrencesBySeverity,
+      occurrencesByCriticality,
       recentOccurrences,
     ] = await Promise.all([
       this.prisma.occurrence.count({ where: occurrenceWhere }),
-      this.prisma.occurrence.count({ where: { ...occurrenceWhere, status: OccurrenceStatus.OPEN } }),
-      this.prisma.occurrence.count({ where: { ...occurrenceWhere, severity: 'CRITICAL', status: { not: OccurrenceStatus.CLOSED } } }),
+      this.prisma.occurrence.count({ where: { ...occurrenceWhere, status: 'aberto' } }),
+      this.prisma.occurrence.count({ where: { ...occurrenceWhere, status: 'emergência ativa' } }),
+      this.prisma.occurrence.count({
+        where: { ...occurrenceWhere, criticality: 'crítica', status: { not: 'resolvido' } },
+      }),
       this.prisma.occurrence.count({ where: { ...occurrenceWhere, resolvedAt: { gte: last24h } } }),
       this.prisma.occurrence.count({ where: { ...occurrenceWhere, createdAt: { gte: last24h } } }),
       this.prisma.alert.count({ where: { ...alertWhere, status: AlertStatus.ACTIVE } }),
-      this.prisma.alert.count({ where: { ...alertWhere, status: AlertStatus.ACTIVE, severity: 'CRITICAL' } }),
       this.prisma.safetyItem.count({
         where: { ...safetyWhere, status: { not: SafetyItemStatus.COMPLETED }, dueDate: { lt: now } },
       }),
-      this.prisma.occurrence.groupBy({
-        by: ['status'],
-        where: occurrenceWhere,
-        _count: true,
-      }),
-      this.prisma.occurrence.groupBy({
-        by: ['severity'],
-        where: occurrenceWhere,
-        _count: true,
-      }),
+      this.prisma.occurrence.groupBy({ by: ['status'], where: occurrenceWhere, _count: true }),
+      this.prisma.occurrence.groupBy({ by: ['criticality'], where: occurrenceWhere, _count: true }),
       this.prisma.occurrence.findMany({
         where: { ...occurrenceWhere, createdAt: { gte: last7d } },
         orderBy: { createdAt: 'desc' },
         take: 10,
         select: {
-          id: true, code: true, title: true, severity: true, status: true, createdAt: true,
+          id: true, incNumber: true, type: true, criticality: true, status: true, createdAt: true,
           terminal: { select: { name: true } },
         },
       }),
     ]);
 
-    // Compute avg resolution time manually
     const resolvedWithTime = await this.prisma.occurrence.findMany({
       where: { ...occurrenceWhere, resolvedAt: { not: null, gte: last30d } },
       select: { createdAt: true, resolvedAt: true },
@@ -85,38 +81,53 @@ export class DashboardService {
       summary: {
         totalOccurrences,
         openOccurrences,
+        activeEmergencies,
         criticalOccurrences,
         resolvedLast24h,
         newLast24h,
         activeAlerts,
-        criticalAlerts,
         overdueItems,
         avgResolutionHours: Math.round(avgResolutionHours * 10) / 10,
       },
       charts: {
         occurrencesByStatus: occurrencesByStatus.map((s) => ({ status: s.status, count: s._count })),
-        occurrencesBySeverity: occurrencesBySeverity.map((s) => ({ severity: s.severity, count: s._count })),
+        occurrencesByCriticality: occurrencesByCriticality.map((s) => ({ criticality: s.criticality, count: s._count })),
       },
-      recentOccurrences,
+      recentOccurrences: recentOccurrences.map((o) => ({
+        id: o.id,
+        incNumber: o.incNumber,
+        type: o.type,
+        criticality: o.criticality,
+        status: o.status,
+        createdAt: o.createdAt,
+        terminalName: o.terminal?.name,
+      })),
     };
   }
 
-  async getCopIndicators(terminalId?: string) {
+  async getCopIndicators(terminalId?: string, organizationId?: string) {
     const where: any = { isActive: true };
+    if (organizationId) where.organizationId = organizationId;
     if (terminalId) where.terminalId = terminalId;
 
-    const [open, inProgress, critical, warRoomsActive] = await Promise.all([
-      this.prisma.occurrence.count({ where: { ...where, status: OccurrenceStatus.OPEN } }),
-      this.prisma.occurrence.count({ where: { ...where, status: OccurrenceStatus.IN_PROGRESS } }),
-      this.prisma.occurrence.count({ where: { ...where, severity: 'CRITICAL', status: { not: OccurrenceStatus.CLOSED } } }),
-      this.prisma.warRoom.count({ where: { status: 'ACTIVE' } }),
+    const [open, inProgress, activeEmergencies, critical, resolved, total] = await Promise.all([
+      this.prisma.occurrence.count({ where: { ...where, status: 'aberto' } }),
+      this.prisma.occurrence.count({ where: { ...where, status: 'em atendimento' } }),
+      this.prisma.occurrence.count({ where: { ...where, status: 'emergência ativa' } }),
+      this.prisma.occurrence.count({
+        where: { ...where, criticality: 'crítica', status: { not: 'resolvido' } },
+      }),
+      this.prisma.occurrence.count({ where: { ...where, status: 'resolvido' } }),
+      this.prisma.occurrence.count({ where }),
     ]);
 
     return {
       openOccurrences: open,
       inProgressOccurrences: inProgress,
+      activeEmergencies,
       criticalOccurrences: critical,
-      activeWarRooms: warRoomsActive,
+      resolvedOccurrences: resolved,
+      totalOccurrences: total,
     };
   }
 }

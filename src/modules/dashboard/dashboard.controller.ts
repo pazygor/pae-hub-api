@@ -20,6 +20,6 @@ export class DashboardController {
   @Get('cop-indicators')
   @ApiOperation({ summary: 'Indicadores em tempo real para o COP' })
   getCopIndicators(@Query('terminalId') terminalId?: string, @CurrentUser() user?: any) {
-    return this.service.getCopIndicators(terminalId || user?.terminalId);
+    return this.service.getCopIndicators(terminalId || user?.terminalId, user?.organizationId);
   }
 }

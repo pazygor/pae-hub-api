@@ -21,6 +21,19 @@ export const TIMELINE_EVENT_TYPE = [
 // DER §4.3: Notificada → Em Atendimento → Confirmada
 export const ENTITY_NOTIFICATION_STATUS = ['Notificada', 'Confirmada', 'Pendente', 'Em Atendimento'] as const;
 
+// Checklist de 8 passos do Situation Room (Funcional §3.3) — semeado ao criar a
+// ocorrência; itens adicionais podem ser acrescentados (decisão 2026-07-05).
+export const OCCURRENCE_CHECKLIST_TEMPLATE = [
+  'Ocorrência validada',
+  'Equipe acionada',
+  'Plano de emergência ativado',
+  'Autoridade notificada',
+  'Evacuação iniciada',
+  'Área isolada',
+  'Comunicação registrada',
+  'Ocorrência encerrada',
+] as const;
+
 export const RISK_LEVEL = ['baixo', 'médio', 'alto'] as const;
 export const PLAN_STATUS = ['ativo', 'inativo', 'em revisão'] as const;
 

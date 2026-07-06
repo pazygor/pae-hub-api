@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { PrismaClient, UserStatus, OccurrenceType, OccurrenceSeverity, OccurrenceCriticality, OccurrenceStatus, AlertType, AlertSeverity, AlertStatus, SafetyItemType, SafetyItemStatus, TimelineEventType, KnowledgeEntryType } from '@prisma/client';
+import { PrismaClient, UserStatus, AlertType, AlertSeverity, AlertStatus, SafetyItemType, SafetyItemStatus, KnowledgeEntryType } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcryptjs';
 
@@ -218,63 +218,80 @@ async function main() {
   }
   console.log(`✅ Tipos de emergência: ${emergencyTypes.length}`);
 
-  // ─── Sample Occurrences ───────────────────────────────────────────────────
-  const fireType = await prisma.emergencyType.findUnique({ where: { code: 'FIRE' } });
-  const medicalType = await prisma.emergencyType.findUnique({ where: { code: 'MEDICAL' } });
+  // ─── Sample Occurrences (Fase 2 — vocabulário pt/DER, idempotente) ─────────
+  const CHECKLIST_TEMPLATE = [
+    'Ocorrência validada', 'Equipe acionada', 'Plano de emergência ativado',
+    'Autoridade notificada', 'Evacuação iniciada', 'Área isolada',
+    'Comunicação registrada', 'Ocorrência encerrada',
+  ];
+  const checklistCreate = { create: CHECKLIST_TEMPLATE.map((text, i) => ({ title: text, order: i })) };
 
-  const occ1 = await prisma.occurrence.create({
-    data: {
-      code: 'OCC-2026-0001',
-      terminalId: terminal1.id,
-      emergencyTypeId: fireType!.id,
-      title: 'Princípio de incêndio na correia transportadora C-07',
-      description: 'Fumaça detectada na correia transportadora C-07, próximo ao silo 3. Acionado sistema de sprinklers automático.',
-      type: OccurrenceType.FIRE,
-      severity: OccurrenceSeverity.HIGH,
-      criticality: OccurrenceCriticality.EMERGENCY,
-      status: OccurrenceStatus.IN_PROGRESS,
-      location: 'Correia C-07, Silo 3',
-      latitude: -23.9618,
-      longitude: -46.3322,
-      reportedByUserId: pedroUser.id,
-      assignedToUserId: carlosUser.id,
-      slaDeadline: new Date(Date.now() + 4 * 60 * 60 * 1000),
-      timeline: {
-        create: [
-          { userId: pedroUser.id, eventType: TimelineEventType.CREATED, description: 'Ocorrência criada por Operador Pedro' },
-          { userId: carlosUser.id, eventType: TimelineEventType.ASSIGNED, description: 'Ocorrência atribuída a Carlos Silva' },
-          { userId: carlosUser.id, eventType: TimelineEventType.STATUS_CHANGED, description: 'Brigada de incêndio acionada. Status alterado para Em Andamento.', metadata: { previousStatus: 'OPEN', newStatus: 'IN_PROGRESS' } },
-        ],
+  let occ1 = await prisma.occurrence.findFirst({ where: { organizationId: org.id, incNumber: 'INC-0001' } });
+  if (!occ1) {
+    occ1 = await prisma.occurrence.create({
+      data: {
+        organizationId: org.id,
+        incNumber: 'INC-0001',
+        terminalId: terminal1.id,
+        type: 'Princípio de incêndio',
+        description: 'Fumaça detectada na correia transportadora C-07, próximo ao silo 3. Acionado sistema de sprinklers automático.',
+        status: 'em atendimento',
+        criticality: 'alta',
+        severity: 'alta',
+        responsible: 'Carlos Silva',
+        team: 'Brigada de Incêndio',
+        location: 'Correia C-07, Silo 3',
+        latitude: -23.9618,
+        longitude: -46.3322,
+        reportedByUserId: pedroUser.id,
+        timeline: {
+          create: [
+            { userId: pedroUser.id, eventType: 'ocorrência registrada', description: 'Fumaça detectada na correia C-07. Sprinklers acionados automaticamente.' },
+            { userId: carlosUser.id, eventType: 'equipe acionada', description: 'Brigada de incêndio acionada por Carlos Silva.' },
+            { userId: carlosUser.id, eventType: 'atualização de status', description: 'Status alterado de "aberto" para "em atendimento".', metadata: { previousStatus: 'aberto', newStatus: 'em atendimento' } },
+          ],
+        },
+        checklist: checklistCreate,
       },
-    },
-  });
+    });
+  }
 
-  const occ2 = await prisma.occurrence.create({
-    data: {
-      code: 'OCC-2026-0002',
-      terminalId: terminal1.id,
-      emergencyTypeId: medicalType!.id,
-      title: 'Trabalhador com suspeita de insolação — Pátio 2',
-      description: 'Operador encontrado inconsciente no pátio 2. SAMU acionado. Temperatura ambiente 38°C.',
-      type: OccurrenceType.MEDICAL,
-      severity: OccurrenceSeverity.CRITICAL,
-      criticality: OccurrenceCriticality.CRISIS,
-      status: OccurrenceStatus.OPEN,
-      location: 'Pátio 2, Terminal Norte',
-      reportedByUserId: pedroUser.id,
-      slaDeadline: new Date(Date.now() + 1 * 60 * 60 * 1000),
-      timeline: {
-        create: [{ userId: pedroUser.id, eventType: TimelineEventType.CREATED, description: 'Ocorrência criada. SAMU acionado.' }],
+  let occ2 = await prisma.occurrence.findFirst({ where: { organizationId: org.id, incNumber: 'INC-0002' } });
+  if (!occ2) {
+    occ2 = await prisma.occurrence.create({
+      data: {
+        organizationId: org.id,
+        incNumber: 'INC-0002',
+        terminalId: terminal1.id,
+        type: 'Acidente de trabalho',
+        description: 'Operador encontrado inconsciente no pátio 2. SAMU acionado. Temperatura ambiente 38°C.',
+        status: 'aberto',
+        criticality: 'crítica',
+        severity: 'alta',
+        responsible: 'Operador Pedro',
+        team: 'SST',
+        location: 'Pátio 2, Terminal Norte',
+        reportedByUserId: pedroUser.id,
+        timeline: {
+          create: [{ userId: pedroUser.id, eventType: 'ocorrência registrada', description: 'Operador encontrado inconsciente. SAMU acionado.' }],
+        },
+        checklist: checklistCreate,
       },
-    },
+    });
+  }
+
+  // Contador do INC-#### nunca regride (banco pode ter mais ocorrências)
+  await prisma.organization.updateMany({
+    where: { id: org.id, occurrenceSeq: { lt: 2 } },
+    data: { occurrenceSeq: 2 },
   });
-  console.log(`✅ Ocorrências de exemplo: ${occ1.code}, ${occ2.code}`);
+  console.log(`✅ Ocorrências de exemplo: ${occ1.incNumber}, ${occ2.incNumber}`);
 
   // ─── Sample Alerts ────────────────────────────────────────────────────────
   await prisma.alert.createMany({
     data: [
       { terminalId: terminal1.id, occurrenceId: occ1.id, title: 'Incêndio detectado — Correia C-07', message: 'Sistema de detecção automática acionado. Temperatura acima de 80°C na correia C-07.', type: AlertType.SAFETY, severity: AlertSeverity.CRITICAL, status: AlertStatus.ACTIVE, source: 'sensor_fire_c07' },
-      { terminalId: terminal1.id, title: 'SLA em risco — OCC-2026-0001', message: 'Ocorrência OCC-2026-0001 com SLA vencendo em menos de 2 horas.', type: AlertType.OPERATIONAL, severity: AlertSeverity.HIGH, status: AlertStatus.ACTIVE, source: 'sla_monitor' },
+      { terminalId: terminal1.id, title: 'SLA em risco — INC-0001', message: 'Ocorrência INC-0001 com SLA vencendo em menos de 2 horas.', type: AlertType.OPERATIONAL, severity: AlertSeverity.HIGH, status: AlertStatus.ACTIVE, source: 'sla_monitor' },
       { terminalId: terminal2.id, title: 'Manutenção preventiva vencida — Guindaste G-03', message: 'Guindaste G-03 com manutenção preventiva vencida há 5 dias.', type: AlertType.OPERATIONAL, severity: AlertSeverity.MEDIUM, status: AlertStatus.ACTIVE, source: 'maintenance_scheduler' },
     ],
   });
@@ -303,7 +320,7 @@ async function main() {
   const warRoom = await prisma.warRoom.create({
     data: {
       occurrenceId: occ1.id,
-      title: `War Room — OCC-2026-0001 (Incêndio C-07)`,
+      title: `War Room — INC-0001 (Incêndio C-07)`,
       status: 'ACTIVE',
       participants: { create: [{ userId: adminUser.id }, { userId: carlosUser.id }, { userId: pedroUser.id }] },
       messages: {

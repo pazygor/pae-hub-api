@@ -19,37 +19,8 @@ enum UserStatus {
   SUSPENDED
 }
 
-enum OccurrenceSeverity {
-  LOW
-  MEDIUM
-  HIGH
-  CRITICAL
-}
-
-enum OccurrenceCriticality {
-  ROUTINE
-  URGENT
-  EMERGENCY
-  CRISIS
-}
-
-enum OccurrenceStatus {
-  OPEN
-  IN_PROGRESS
-  RESOLVED
-  CLOSED
-  CANCELLED
-}
-
-enum OccurrenceType {
-  FIRE
-  MEDICAL
-  OPERATIONAL
-  ENVIRONMENTAL
-  SECURITY
-  STRUCTURAL
-  OTHER
-}
+// Occurrence usa Strings pt-BR validadas na borda da API (src/domain/enums.ts),
+// como role/accessLevel — decisão da revisão 2026-07-05 (plano §4.2).
 
 enum AlertSeverity {
   INFO
@@ -79,28 +50,6 @@ enum AlertType {
 enum WarRoomStatus {
   ACTIVE
   CLOSED
-}
-
-enum TimelineEventType {
-  CREATED
-  STATUS_CHANGED
-  ASSIGNED
-  COMMENT
-  EVIDENCE_ADDED
-  ALERT_LINKED
-  WAR_ROOM_OPENED
-  WAR_ROOM_CLOSED
-  CHECKLIST_UPDATED
-  RESOLVED
-  CLOSED
-}
-
-enum EvidenceType {
-  PHOTO
-  VIDEO
-  DOCUMENT
-  AUDIO
-  OTHER
 }
 
 enum SafetyItemType {
@@ -150,12 +99,15 @@ model Organization {
   description String?  @db.Text
   logoUrl     String?  @db.VarChar(500)
   isActive    Boolean  @default(true)
+  // Contador atômico do INC-#### sequencial por organização (Fase 2)
+  occurrenceSeq Int    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  terminals Terminal[]
-  users     User[]
-  entities  Entity[]
+  terminals   Terminal[]
+  users       User[]
+  entities    Entity[]
+  occurrences Occurrence[]
 
   @@map("organizations")
 }
@@ -263,7 +215,6 @@ model User {
 
   refreshTokens        RefreshToken[]
   reportedOccurrences  Occurrence[]         @relation("ReportedBy")
-  assignedOccurrences  Occurrence[]         @relation("AssignedTo")
   timelineEvents       OccurrenceTimeline[]
   warRoomParticipants  WarRoomParticipant[]
   warRoomMessages      WarRoomMessage[]
@@ -310,63 +261,63 @@ model EmergencyType {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
-  occurrences Occurrence[]
-
   @@map("emergency_types")
 }
 
 // ─── Occurrences ─────────────────────────────────────────────────────────────
 
+// Alinhado ao DER §6.3 (Fase 2): vocabulário pt-BR, INC-#### por organização,
+// responsible/team. Extras do Manus (title, emergencyType, SLA) removidos.
 model Occurrence {
-  id                  String                @id @default(uuid())
-  code                String                @unique @db.VarChar(30)
-  terminalId          String
-  emergencyTypeId     String?
-  title               String                @db.VarChar(255)
-  description         String                @db.Text
-  type                OccurrenceType        @default(OPERATIONAL)
-  severity            OccurrenceSeverity    @default(MEDIUM)
-  criticality         OccurrenceCriticality @default(URGENT)
-  status              OccurrenceStatus      @default(OPEN)
-  location            String?               @db.VarChar(255)
-  latitude            Float?
-  longitude           Float?
-  reportedByUserId    String
-  assignedToUserId    String?
-  resolvedAt          DateTime?
-  closedAt            DateTime?
-  slaDeadline         DateTime?
-  isActive            Boolean               @default(true)
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
+  id               String    @id @default(uuid())
+  organizationId   String
+  incNumber        String    @db.VarChar(20) // INC-#### sequencial por organização
+  terminalId       String
+  type             String    @db.VarChar(100) // tipo de ocorrência (livre, como no front)
+  description      String    @db.Text
+  status           String    @default("aberto") @db.VarChar(30) // aberto | em atendimento | emergência ativa | resolvido
+  criticality      String    @default("média") @db.VarChar(20)  // baixa | média | alta | crítica
+  severity         String?   @db.VarChar(20)                    // baixa | média | alta (obrigatória no despacho)
+  responsible      String?   @db.VarChar(255)
+  team             String?   @db.VarChar(255)
+  location         String?   @db.VarChar(255)
+  latitude         Float?
+  longitude        Float?
+  reportedByUserId String
+  resolvedAt       DateTime?
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  terminal        Terminal       @relation(fields: [terminalId], references: [id])
-  emergencyType   EmergencyType? @relation(fields: [emergencyTypeId], references: [id])
-  reportedBy      User           @relation("ReportedBy", fields: [reportedByUserId], references: [id])
-  assignedTo      User?          @relation("AssignedTo", fields: [assignedToUserId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+  terminal     Terminal     @relation(fields: [terminalId], references: [id])
+  reportedBy   User         @relation("ReportedBy", fields: [reportedByUserId], references: [id])
 
-  timeline    OccurrenceTimeline[]
-  evidences   Evidence[]
-  alerts      Alert[]
-  warRooms    WarRoom[]
-  checklist   ChecklistItem[]
-  aiInsights  AgentInsight[]
+  timeline   OccurrenceTimeline[]
+  evidences  Evidence[]
+  alerts     Alert[]
+  warRooms   WarRoom[]
+  checklist  ChecklistItem[]
+  aiInsights AgentInsight[]
 
+  @@unique([organizationId, incNumber])
+  @@index([organizationId])
   @@index([terminalId])
   @@index([status])
-  @@index([severity])
   @@index([createdAt])
   @@map("occurrences")
 }
 
+// Timeline imutável (DER §6.3): eventos tipados em pt-BR (TIMELINE_EVENT_TYPE)
 model OccurrenceTimeline {
-  id           String            @id @default(uuid())
+  id           String   @id @default(uuid())
   occurrenceId String
   userId       String?
-  eventType    TimelineEventType
-  description  String            @db.Text
+  eventType    String   @db.VarChar(50)
+  description  String   @db.Text
+  attachment   String?  @db.VarChar(255) // nome de arquivo (placeholder, como no front)
   metadata     Json?
-  createdAt    DateTime          @default(now())
+  createdAt    DateTime @default(now())
 
   occurrence Occurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
   user       User?      @relation(fields: [userId], references: [id])
@@ -375,19 +326,21 @@ model OccurrenceTimeline {
   @@map("occurrence_timeline")
 }
 
+// Fase 2: evidências só-metadados (upload real de arquivo fica na Fase 6 —
+// por isso os campos de storage são opcionais).
 model Evidence {
-  id           String       @id @default(uuid())
+  id           String   @id @default(uuid())
   occurrenceId String
   uploadedById String?
-  type         EvidenceType @default(PHOTO)
-  filename     String       @db.VarChar(255)
-  originalName String       @db.VarChar(255)
-  mimeType     String       @db.VarChar(100)
-  sizeBytes    Int
-  storageKey   String       @db.VarChar(500)
-  storageUrl   String       @db.VarChar(1000)
-  description  String?      @db.Text
-  createdAt    DateTime     @default(now())
+  type         String   @default("documento") @db.VarChar(30) // foto | vídeo | documento | áudio | outro
+  filename     String   @db.VarChar(255)
+  originalName String?  @db.VarChar(255)
+  mimeType     String?  @db.VarChar(100)
+  sizeBytes    Int?
+  storageKey   String?  @db.VarChar(500)
+  storageUrl   String?  @db.VarChar(1000)
+  description  String?  @db.Text
+  createdAt    DateTime @default(now())
 
   occurrence Occurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
 

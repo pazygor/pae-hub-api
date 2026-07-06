@@ -55,7 +55,7 @@ export class AlertsService {
         orderBy: [{ severity: 'desc' }, { createdAt: 'desc' }],
         include: {
           terminal: { select: { id: true, name: true } },
-          occurrence: { select: { id: true, code: true, title: true } },
+          occurrence: { select: { id: true, incNumber: true, type: true } },
           acknowledgedBy: { select: { id: true, name: true } },
           resolvedBy: { select: { id: true, name: true } },
         },
@@ -74,7 +74,7 @@ export class AlertsService {
       where: { id },
       include: {
         terminal: { select: { id: true, name: true } },
-        occurrence: { select: { id: true, code: true, title: true } },
+        occurrence: { select: { id: true, incNumber: true, type: true } },
         acknowledgedBy: { select: { id: true, name: true } },
         resolvedBy: { select: { id: true, name: true } },
       },

@@ -23,7 +23,7 @@ export class WarRoomService {
         take: Number(limit),
         orderBy: { openedAt: 'desc' },
         include: {
-          occurrence: { select: { id: true, code: true, title: true, severity: true } },
+          occurrence: { select: { id: true, incNumber: true, type: true, severity: true } },
           _count: { select: { participants: true, messages: true, decisions: true } },
         },
       }),
@@ -45,7 +45,7 @@ export class WarRoomService {
     const warRoom = await this.prisma.warRoom.findUnique({
       where: { id },
       include: {
-        occurrence: { select: { id: true, code: true, title: true, severity: true, status: true } },
+        occurrence: { select: { id: true, incNumber: true, type: true, severity: true, status: true } },
         participants: {
           include: { user: { select: { id: true, name: true, role: true, avatarUrl: true } } },
         },
@@ -67,14 +67,14 @@ export class WarRoomService {
   async create(dto: { occurrenceId: string; title?: string }, user: any) {
     const occurrence = await this.prisma.occurrence.findUnique({
       where: { id: dto.occurrenceId },
-      select: { id: true, code: true, title: true },
+      select: { id: true, incNumber: true, type: true },
     });
     if (!occurrence) throw new NotFoundException('Ocorrência não encontrada');
 
     const warRoom = await this.prisma.warRoom.create({
       data: {
         occurrenceId: dto.occurrenceId,
-        title: dto.title || `War Room — ${occurrence.code}`,
+        title: dto.title || `War Room — ${occurrence.incNumber}`,
         status: WarRoomStatus.ACTIVE,
         participants: {
           create: { userId: user.id },
@@ -88,12 +88,12 @@ export class WarRoomService {
         },
       },
       include: {
-        occurrence: { select: { id: true, code: true, title: true } },
+        occurrence: { select: { id: true, incNumber: true, type: true } },
         _count: { select: { participants: true } },
       },
     });
 
-    this.logger.log(`War Room ${warRoom.id} created for occurrence ${occurrence.code}`);
+    this.logger.log(`War Room ${warRoom.id} created for occurrence ${occurrence.incNumber}`);
     return warRoom;
   }
 

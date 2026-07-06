@@ -35,9 +35,9 @@ export class AiCommandService {
       if (occurrence) {
         occurrenceContext = `
 OCORRÊNCIA ATIVA:
-- Código: ${occurrence.code}
-- Título: ${occurrence.title}
-- Severidade: ${occurrence.severity}
+- Código: ${occurrence.incNumber}
+- Tipo: ${occurrence.type}
+- Severidade: ${occurrence.severity ?? 'N/A'}
 - Status: ${occurrence.status}
 - Criticidade: ${occurrence.criticality}
 - Localização: ${occurrence.location || 'N/A'}
