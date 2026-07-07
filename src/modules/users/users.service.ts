@@ -59,6 +59,19 @@ export class UsersService {
     return { data: items, meta: { total, page: Number(page), limit: Number(limit) } };
   }
 
+  /** Crachá do PAE — contatos ativos da organização, para qualquer papel. */
+  async findContacts(requestingUser: any) {
+    return this.prisma.user.findMany({
+      where: { organizationId: requestingUser.organizationId, status: 'ACTIVE' },
+      orderBy: { name: 'asc' },
+      select: {
+        id: true, name: true, email: true, phone: true, role: true, accessLevel: true,
+        terminalId: true,
+        terminal: { select: { id: true, name: true, contact: true, responsible: true } },
+      },
+    });
+  }
+
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },

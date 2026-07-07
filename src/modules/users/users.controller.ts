@@ -28,6 +28,14 @@ export class UsersController {
     return this.service.findAll({ terminalId, role, status, page, limit }, user);
   }
 
+  // Crachá do PAE: lista de contatos para comunicação rápida — acessível a
+  // QUALQUER papel autenticado (inclusive entity), só campos de contato.
+  @Get('contacts')
+  @ApiOperation({ summary: 'Contatos da organização (Crachá do PAE)' })
+  findContacts(@CurrentUser() user: any) {
+    return this.service.findContacts(user);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Buscar usuário por ID' })
   findOne(@Param('id') id: string) {

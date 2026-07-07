@@ -139,7 +139,7 @@ async function main() {
       name: 'Administrador Geral', email: 'admin@paehub.com',
       passwordHash: await hash('admin123'),
       role: 'admin', accessLevel: null, status: UserStatus.ACTIVE,
-      department: 'TI / Operações',
+      department: 'TI / Operações', phone: '(13) 99900-0001',
     },
   });
 
@@ -151,7 +151,7 @@ async function main() {
       name: 'Diretor Portuário', email: 'diretor@tecon.com',
       passwordHash: await hash('estrategico123'),
       role: 'terminal', accessLevel: 'estratégico', status: UserStatus.ACTIVE,
-      department: 'Diretoria',
+      department: 'Diretoria', phone: '(13) 99900-0002',
     },
   });
 
@@ -175,7 +175,7 @@ async function main() {
       name: 'Supervisor João', email: 'joao@tecon.com',
       passwordHash: await hash('tatico123'),
       role: 'terminal', accessLevel: 'tático', status: UserStatus.ACTIVE,
-      department: 'Supervisão',
+      department: 'Supervisão', phone: '(13) 99900-0003',
     },
   });
 
@@ -187,7 +187,7 @@ async function main() {
       name: 'Operador Pedro', email: 'pedro@tecon.com',
       passwordHash: await hash('operacional123'),
       role: 'terminal', accessLevel: 'operacional', status: UserStatus.ACTIVE,
-      department: 'Campo', tacticalManagerId: joaoUser.id,
+      department: 'Campo', phone: '(13) 99900-0004', tacticalManagerId: joaoUser.id,
     },
   });
 
