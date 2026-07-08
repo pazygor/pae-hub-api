@@ -11,6 +11,7 @@ import { EntitiesModule } from './modules/entities/entities.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { NotificationRulesModule } from './modules/notification-rules/notification-rules.module';
 import { EntityNotificationsModule } from './modules/entity-notifications/entity-notifications.module';
+import { GeocodingModule } from './modules/geocoding/geocoding.module';
 import { RisksModule } from './modules/risks/risks.module';
 import { EmergencyPlansModule } from './modules/emergency-plans/emergency-plans.module';
 import { MapElementsModule } from './modules/map-elements/map-elements.module';
@@ -43,6 +44,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     PermissionsModule,
     NotificationRulesModule,
     EntityNotificationsModule,
+    GeocodingModule,
     RisksModule,
     EmergencyPlansModule,
     MapElementsModule,

@@ -51,7 +51,9 @@ export class TerminalsService {
         name: dto.name,
         code,
         description: dto.description,
-        location: dto.location,
+        location: this.composeLocation(dto),
+        cep: dto.cep, street: dto.street, number: dto.number,
+        neighborhood: dto.neighborhood, city: dto.city, state: dto.state,
         responsible: dto.responsible,
         contact: dto.contact,
         latitude: dto.latitude,
@@ -71,7 +73,9 @@ export class TerminalsService {
         name: dto.name,
         code: dto.code,
         description: dto.description,
-        location: dto.location,
+        location: this.composeLocation(dto),
+        cep: dto.cep, street: dto.street, number: dto.number,
+        neighborhood: dto.neighborhood, city: dto.city, state: dto.state,
         responsible: dto.responsible,
         contact: dto.contact,
         latitude: dto.latitude,
@@ -80,6 +84,12 @@ export class TerminalsService {
       },
     });
     return this.format(terminal);
+  }
+
+  /** Endereço legível composto dos campos estruturados (fallback: dto.location). */
+  private composeLocation(dto: Partial<CreateTerminalDto>): string | undefined {
+    const parts = [dto.street, dto.number, dto.neighborhood, dto.city, dto.state].filter(Boolean);
+    return parts.length ? parts.join(', ') : dto.location;
   }
 
   async remove(id: string) {
@@ -111,6 +121,12 @@ export class TerminalsService {
       responsible: t.responsible ?? '',
       contact: t.contact ?? '',
       location: t.location ?? '',
+      cep: t.cep ?? '',
+      street: t.street ?? '',
+      number: t.number ?? '',
+      neighborhood: t.neighborhood ?? '',
+      city: t.city ?? '',
+      state: t.state ?? '',
       lat: t.latitude,
       lng: t.longitude,
       status: t.status,
