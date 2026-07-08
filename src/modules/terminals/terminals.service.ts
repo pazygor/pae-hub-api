@@ -9,14 +9,25 @@ export class TerminalsService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Terminais visíveis: admin vê todos da organização; demais papéis veem
-   * apenas o terminal vinculado. (Entidades ganharão visibilidade por
-   * Permission na Fase 4b.)
+   * Terminais visíveis (regra "Terminais Visíveis" de Níveis de Acesso):
+   * - admin: todos da organização (ou os marcados, se a lista estiver preenchida);
+   * - não-admin: os terminais marcados (não-vazio); senão, o terminal-casa
+   *   (`terminal`) ou nenhum (`entity` sem lista).
+   * Como `Terminal` é o próprio tenant, o filtro é por `id`.
    */
   async findAll(user: any) {
     const where: any = { organizationId: user.organizationId };
-    if (user.role !== 'admin') {
-      where.id = user.terminalId ?? '__none__';
+    const allowed: string[] = user.allowedTerminals ?? [];
+
+    if (user.role === 'terminal') {
+      // casa sempre visível + adicionais liberados
+      const ids = [...new Set([user.terminalId, ...allowed].filter(Boolean))];
+      where.id = { in: ids.length ? ids : ['__none__'] };
+    } else if (user.role === 'entity') {
+      where.id = { in: allowed.length ? allowed : ['__none__'] };
+    } else if (allowed.length) {
+      // admin: a lista (se preenchida) apenas estreita
+      where.id = { in: allowed };
     }
 
     const items = await this.prisma.terminal.findMany({

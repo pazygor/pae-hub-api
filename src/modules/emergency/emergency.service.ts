@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway, CopEventType } from '../realtime/realtime.gateway';
+import { tenantScope, userCanAccessTerminal } from '../../common/helpers/tenant-scope';
 import { OCCURRENCE_CHECKLIST_TEMPLATE } from '../../domain/enums';
 import {
   CreateOccurrenceDto,
@@ -92,6 +93,13 @@ export class EmergencyService {
       where: { id: terminalId, organizationId: user.organizationId },
     });
     if (!terminal) throw new ForbiddenException('Terminal inválido para esta organização');
+
+    // "Tipos de Ocorrência" (Níveis de Acesso): quando NÃO-VAZIO, o usuário só
+    // pode abrir os tipos permitidos. Vazio/ausente = sem restrição.
+    const allowedTypes: string[] = user.allowedOccurrenceTypes ?? [];
+    if (user.role !== 'admin' && allowedTypes.length && dto.type && !allowedTypes.includes(dto.type)) {
+      throw new ForbiddenException(`Seu perfil não permite abrir ocorrências do tipo "${dto.type}"`);
+    }
 
     const incNumber = await this.nextIncNumber(user.organizationId);
 
@@ -398,15 +406,9 @@ export class EmergencyService {
   }
 
   /** Escopo multi-tenant: admin→organização; terminal→próprio terminal; entity→terminais permitidos. */
+  // Delega ao helper compartilhado (mesma lógica de "Terminais Visíveis").
   private async tenantWhere(user: any): Promise<Record<string, any>> {
-    if (user.role === 'admin') return { organizationId: user.organizationId };
-    if (user.role === 'terminal') return { terminalId: user.terminalId ?? '—' };
-    // entity: allowedTerminals do cadastro (refinado com Permission na Fase 3)
-    const dbUser = await this.prisma.user.findUnique({
-      where: { id: user.id },
-      select: { allowedTerminals: true },
-    });
-    return { terminalId: { in: dbUser?.allowedTerminals ?? [] } };
+    return tenantScope(this.prisma, user);
   }
 
   private async checkTenantAccess(occurrence: any, user: any) {
@@ -417,16 +419,16 @@ export class EmergencyService {
       return;
     }
     if (user.role === 'terminal') {
-      if (occurrence.terminalId !== user.terminalId) {
+      // casa sempre acessível + terminais adicionais liberados
+      if (!userCanAccessTerminal(user, occurrence.terminalId)) {
         throw new ForbiddenException('Acesso negado a este recurso');
       }
       return;
     }
-    const dbUser = await this.prisma.user.findUnique({
-      where: { id: user.id },
-      select: { allowedTerminals: true },
-    });
-    if (!dbUser?.allowedTerminals?.includes(occurrence.terminalId)) {
+    const allowedEntity: string[] = user.allowedTerminals?.length
+      ? user.allowedTerminals
+      : (await this.prisma.user.findUnique({ where: { id: user.id }, select: { allowedTerminals: true } }))?.allowedTerminals ?? [];
+    if (!allowedEntity.includes(occurrence.terminalId)) {
       throw new ForbiddenException('Acesso negado a este recurso');
     }
   }

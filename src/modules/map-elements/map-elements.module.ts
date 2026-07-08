@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { tenantScope, resolveTerminalId } from '../../common/helpers/tenant-scope';
+import { tenantScope, resolveTerminalId, userCanAccessTerminal } from '../../common/helpers/tenant-scope';
 import { MAP_LAYER_TYPE } from '../../domain/enums';
 
 // Fase 5a — Elementos do Mapa de Emergência (DER §6.3 / Funcional §3.5):
@@ -96,7 +96,7 @@ export class MapElementsService {
     const el = await this.prisma.mapElement.findUnique({ where: { id } });
     if (!el) throw new NotFoundException(`Elemento ${id} não encontrado`);
     if (el.organizationId !== user.organizationId) throw new ForbiddenException('Acesso negado');
-    if (user.role === 'terminal' && el.terminalId !== user.terminalId) throw new ForbiddenException('Acesso negado');
+    if (user.role !== 'admin' && !userCanAccessTerminal(user, el.terminalId)) throw new ForbiddenException('Acesso negado');
     return el;
   }
 }

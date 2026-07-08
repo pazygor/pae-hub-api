@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { tenantScope, resolveTerminalId } from '../../common/helpers/tenant-scope';
+import { tenantScope, resolveTerminalId, userCanAccessTerminal } from '../../common/helpers/tenant-scope';
 import { PLAN_STATUS } from '../../domain/enums';
 
 // Fase 5a — Planos de Ação PAE com checklist executável (DER §6.1 / Funcional §3.6).
@@ -109,7 +109,7 @@ export class EmergencyPlansService {
     const plan = await this.prisma.emergencyPlan.findUnique({ where: { id } });
     if (!plan) throw new NotFoundException(`Plano ${id} não encontrado`);
     if (plan.organizationId !== user.organizationId) throw new ForbiddenException('Acesso negado');
-    if (user.role === 'terminal' && plan.terminalId !== user.terminalId) throw new ForbiddenException('Acesso negado');
+    if (user.role !== 'admin' && !userCanAccessTerminal(user, plan.terminalId)) throw new ForbiddenException('Acesso negado');
     return plan;
   }
 }

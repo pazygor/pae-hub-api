@@ -71,6 +71,8 @@ export class AuthService {
         organizationName: user.organization?.name,
         avatarUrl: user.avatarUrl,
         allowedModules: user.allowedModules,
+        allowedTerminals: user.allowedTerminals,
+        allowedOccurrenceTypes: user.allowedOccurrenceTypes,
         permissions: this.getPermissionsForRole(user.role, user.accessLevel),
       },
     };
@@ -166,6 +168,8 @@ export class AuthService {
       department: user.department,
       lastLoginAt: user.lastLoginAt,
       allowedModules: user.allowedModules,
+      allowedTerminals: user.allowedTerminals,
+      allowedOccurrenceTypes: user.allowedOccurrenceTypes,
       permissions: this.getPermissionsForRole(user.role, user.accessLevel),
     };
   }

@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { tenantScope, resolveTerminalId } from '../../common/helpers/tenant-scope';
+import { tenantScope, resolveTerminalId, userCanAccessTerminal } from '../../common/helpers/tenant-scope';
 import { DOCUMENT_TYPE } from '../../domain/enums';
 
 // Fase 5a — Biblioteca de documentos PAE (DER §6.1 / Funcional §3.8).
@@ -97,7 +97,7 @@ export class PaeDocumentsService {
     const doc = await this.prisma.pAEDocument.findUnique({ where: { id } });
     if (!doc) throw new NotFoundException(`Documento ${id} não encontrado`);
     if (doc.organizationId !== user.organizationId) throw new ForbiddenException('Acesso negado');
-    if (user.role === 'terminal' && doc.terminalId !== user.terminalId) throw new ForbiddenException('Acesso negado');
+    if (user.role !== 'admin' && !userCanAccessTerminal(user, doc.terminalId)) throw new ForbiddenException('Acesso negado');
     return doc;
   }
 }

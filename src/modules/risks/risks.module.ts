@@ -7,7 +7,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { tenantScope, resolveTerminalId } from '../../common/helpers/tenant-scope';
+import { tenantScope, resolveTerminalId, userCanAccessTerminal } from '../../common/helpers/tenant-scope';
 import { RISK_LEVEL } from '../../domain/enums';
 
 // Fase 5a — Inventário de riscos por terminal e área (DER §6.1 / Funcional §3.7).
@@ -99,7 +99,7 @@ export class RisksService {
     const risk = await this.prisma.risk.findUnique({ where: { id } });
     if (!risk) throw new NotFoundException(`Risco ${id} não encontrado`);
     if (risk.organizationId !== user.organizationId) throw new ForbiddenException('Acesso negado');
-    if (user.role === 'terminal' && risk.terminalId !== user.terminalId) throw new ForbiddenException('Acesso negado');
+    if (user.role !== 'admin' && !userCanAccessTerminal(user, risk.terminalId)) throw new ForbiddenException('Acesso negado');
     return risk;
   }
 }

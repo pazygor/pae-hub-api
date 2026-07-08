@@ -39,6 +39,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         terminalId: true,
         tacticalManagerId: true,
         organizationId: true,
+        // Autorização fina (Níveis de Acesso) — no req.user para enforcement
+        allowedModules: true,
+        allowedTerminals: true,
+        allowedOccurrenceTypes: true,
       },
     });
 

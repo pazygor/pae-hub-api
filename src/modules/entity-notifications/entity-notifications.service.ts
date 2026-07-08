@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway, CopEventType } from '../realtime/realtime.gateway';
+import { tenantScope } from '../../common/helpers/tenant-scope';
 
 // Fase 3 — EntityNotification (DER §6.3): notificação disparada numa ocorrência.
 // Progressão oficial: Notificada → Em Atendimento → Confirmada (Funcional §4.3).
@@ -12,8 +13,8 @@ export class EntityNotificationsService {
   ) {}
 
   async findAll(occurrenceId: string | undefined, user: any) {
-    const occurrenceWhere: any = { organizationId: user.organizationId };
-    if (user.role === 'terminal') occurrenceWhere.terminalId = user.terminalId ?? '—';
+    // Escopo da ocorrência-pai segue "Terminais Visíveis" (helper compartilhado).
+    const occurrenceWhere: any = { organizationId: user.organizationId, ...(await tenantScope(this.prisma, user)) };
 
     const notifications = await this.prisma.entityNotification.findMany({
       where: {
