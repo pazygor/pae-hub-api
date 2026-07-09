@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTerminalDto, UpdateTerminalDto } from './dto/terminal.dto';
 
@@ -100,6 +100,40 @@ export class TerminalsService {
       data: { status: 'Inativo', isActive: false },
     });
     return { message: 'Terminal inativado com sucesso' };
+  }
+
+  /**
+   * Exclusão permanente (admin) — bloqueada se houver qualquer dado vinculado,
+   * para preservar o histórico/auditoria (decisão do gestor, 2026-07-08).
+   * Use "Inativar" para terminais que já têm operação registrada.
+   */
+  async hardDelete(id: string) {
+    await this.ensureExists(id);
+
+    const [users, occurrences, risks, plans, mapElements, documents, alerts] = await Promise.all([
+      this.prisma.user.count({ where: { terminalId: id } }),
+      this.prisma.occurrence.count({ where: { terminalId: id } }),
+      this.prisma.risk.count({ where: { terminalId: id } }),
+      this.prisma.emergencyPlan.count({ where: { terminalId: id } }),
+      this.prisma.mapElement.count({ where: { terminalId: id } }),
+      this.prisma.pAEDocument.count({ where: { terminalId: id } }),
+      this.prisma.alert.count({ where: { terminalId: id } }),
+    ]);
+
+    const blockers = ([
+      ['usuário(s)', users], ['ocorrência(s)', occurrences], ['risco(s)', risks],
+      ['plano(s) de ação', plans], ['elemento(s) de mapa', mapElements],
+      ['documento(s)', documents], ['alerta(s)', alerts],
+    ] as [string, number][]).filter(([, count]) => count > 0);
+
+    if (blockers.length) {
+      throw new ConflictException(
+        `Não é possível excluir: há ${blockers.map(([label, c]) => `${c} ${label}`).join(', ')} vinculado(s) a este terminal. Use "Inativar" para preservar o histórico.`,
+      );
+    }
+
+    await this.prisma.terminal.delete({ where: { id } });
+    return { message: 'Terminal excluído permanentemente' };
   }
 
   private async ensureExists(id: string) {

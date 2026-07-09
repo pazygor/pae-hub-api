@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateEntityDto, UpdateEntityDto } from './dto/entity.dto';
 
@@ -50,6 +50,38 @@ export class EntitiesService {
     // Soft delete (consistente com terminais/usuários).
     await this.prisma.entity.update({ where: { id }, data: { status: 'Inativo' } });
     return { message: 'Entidade inativada com sucesso' };
+  }
+
+  /**
+   * Exclusão permanente (admin) — bloqueada se houver qualquer dado vinculado,
+   * para preservar o histórico/auditoria (decisão do gestor, 2026-07-08).
+   * Permission/NotificationRule/EntityNotification têm onDelete: Cascade no
+   * schema — sem este bloqueio, excluiriam o histórico de acionamento em
+   * emergências reais sem aviso.
+   */
+  async hardDelete(id: string) {
+    await this.ensureExists(id);
+
+    const [permission, rules, notifications] = await Promise.all([
+      this.prisma.permission.count({ where: { entityId: id } }),
+      this.prisma.notificationRule.count({ where: { entityId: id } }),
+      this.prisma.entityNotification.count({ where: { entityId: id } }),
+    ]);
+
+    const blockers = ([
+      ['permissão(ões) de terminal', permission],
+      ['regra(s) de acionamento', rules],
+      ['notificação(ões) de emergência já disparada(s)', notifications],
+    ] as [string, number][]).filter(([, count]) => count > 0);
+
+    if (blockers.length) {
+      throw new ConflictException(
+        `Não é possível excluir: há ${blockers.map(([label, c]) => `${c} ${label}`).join(', ')} vinculado(s) a esta entidade. Use "Inativar" para preservar o histórico.`,
+      );
+    }
+
+    await this.prisma.entity.delete({ where: { id } });
+    return { message: 'Entidade excluída permanentemente' };
   }
 
   private async ensureExists(id: string) {

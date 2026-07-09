@@ -161,4 +161,42 @@ export class UsersService {
       select: { id: true, name: true, email: true, status: true },
     });
   }
+
+  /**
+   * Exclusão permanente (admin) — bloqueada se houver qualquer dado vinculado,
+   * para preservar o histórico/auditoria (decisão do gestor, 2026-07-08).
+   * Timeline/chat/treinamentos/EPIs registram QUEM fez o quê — excluir o
+   * usuário sem checar isso apagaria (ou quebraria) esse rastro.
+   */
+  async hardDelete(id: string) {
+    const found = await this.prisma.user.findUnique({ where: { id }, select: { id: true } });
+    if (!found) throw new NotFoundException(`Usuário ${id} não encontrado`);
+
+    const [occurrences, timelineEvents, chatMessages, trainings, epis, managedOperators] = await Promise.all([
+      this.prisma.occurrence.count({ where: { reportedByUserId: id } }),
+      this.prisma.occurrenceTimeline.count({ where: { userId: id } }),
+      this.prisma.chatMessage.count({ where: { userId: id } }),
+      this.prisma.userTraining.count({ where: { userId: id } }),
+      this.prisma.userEpi.count({ where: { userId: id } }),
+      this.prisma.user.count({ where: { tacticalManagerId: id } }),
+    ]);
+
+    const blockers = ([
+      ['ocorrência(s) registrada(s)', occurrences],
+      ['evento(s) de timeline', timelineEvents],
+      ['mensagem(ns) de chat', chatMessages],
+      ['atribuição(ões) de treinamento', trainings],
+      ['entrega(s) de EPI', epis],
+      ['operacional(is) sob sua gestão', managedOperators],
+    ] as [string, number][]).filter(([, count]) => count > 0);
+
+    if (blockers.length) {
+      throw new ConflictException(
+        `Não é possível excluir: há ${blockers.map(([label, c]) => `${c} ${label}`).join(', ')} vinculado(s) a este usuário. Use "Inativar" para preservar o histórico.`,
+      );
+    }
+
+    await this.prisma.user.delete({ where: { id } });
+    return { message: 'Usuário excluído permanentemente' };
+  }
 }

@@ -46,4 +46,11 @@ export class TerminalsController {
   remove(@Param('id') id: string) {
     return this.service.remove(id);
   }
+
+  @Delete(':id/permanent')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Excluir terminal permanentemente (bloqueado se houver dados vinculados)' })
+  hardDelete(@Param('id') id: string) {
+    return this.service.hardDelete(id);
+  }
 }

@@ -46,4 +46,11 @@ export class EntitiesController {
   remove(@Param('id') id: string) {
     return this.service.remove(id);
   }
+
+  @Delete(':id/permanent')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Excluir entidade permanentemente (bloqueado se houver dados vinculados)' })
+  hardDelete(@Param('id') id: string) {
+    return this.service.hardDelete(id);
+  }
 }

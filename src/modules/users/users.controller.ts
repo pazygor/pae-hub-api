@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UsersService, CreateUserDto, UpdateUserDto } from './users.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -61,5 +61,12 @@ export class UsersController {
   @ApiOperation({ summary: 'Ativar/suspender usuário' })
   updateStatus(@Param('id') id: string, @Body() body: { status: UserStatus }) {
     return this.service.updateStatus(id, body.status);
+  }
+
+  @Delete(':id/permanent')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Excluir usuário permanentemente (bloqueado se houver dados vinculados)' })
+  hardDelete(@Param('id') id: string) {
+    return this.service.hardDelete(id);
   }
 }
