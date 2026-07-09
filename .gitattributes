@@ -1,0 +1,3 @@
+# Garante LF no entrypoint (sh quebra com CRLF) mesmo em checkouts no Windows
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf
