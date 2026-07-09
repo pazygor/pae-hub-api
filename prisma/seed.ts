@@ -408,6 +408,14 @@ async function main() {
   }
   console.log(`✅ 5b: ${trainingSpecs.length} treinamentos · ${epiSpecs.length} EPIs · ${complianceSpecs.length} itens de conformidade`);
 
+  // ─── Padrão de "Tipos de Ocorrência": usuário não-admin vê TODOS por padrão ──
+  // (vazio = não vê nenhuma). Idempotente — só toca os que estão vazios.
+  const OCC_TYPES = ['Princípio de incêndio', 'Vazamento', 'Emergência', 'Explosão', 'Queda de carga', 'Acidente de trabalho', 'Contaminação ambiental', 'Outros'];
+  await prisma.user.updateMany({
+    where: { organizationId: org.id, role: { not: 'admin' }, allowedOccurrenceTypes: { isEmpty: true } },
+    data: { allowedOccurrenceTypes: OCC_TYPES },
+  });
+
   // ─── Sample Alerts ────────────────────────────────────────────────────────
   await prisma.alert.createMany({
     data: [

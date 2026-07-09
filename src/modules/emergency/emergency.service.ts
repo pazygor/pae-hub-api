@@ -34,6 +34,14 @@ export class EmergencyService {
 
     const where: any = { isActive: true, ...(await this.tenantWhere(user)) };
 
+    // "Tipos de Ocorrência" (Níveis de Acesso): o usuário só ENXERGA os tipos
+    // permitidos. Vazio = NÃO vê nenhuma (o padrão de usuário novo é todos os 8).
+    // Admin não tem restrição.
+    if (user.role !== 'admin') {
+      const allowedTypes: string[] = user.allowedOccurrenceTypes ?? [];
+      where.AND = [...(where.AND ?? []), { type: { in: allowedTypes } }];
+    }
+
     if (terminalId && terminalId !== 'all') where.terminalId = terminalId;
     if (status) where.status = status;
     if (criticality) where.criticality = criticality;
@@ -412,6 +420,14 @@ export class EmergencyService {
   }
 
   private async checkTenantAccess(occurrence: any, user: any) {
+    // "Tipos de Ocorrência" (Níveis de Acesso): bloqueia acesso a tipo não
+    // permitido (vazio = nenhum tipo permitido → bloqueia todos).
+    if (user.role !== 'admin') {
+      const allowedTypes: string[] = user.allowedOccurrenceTypes ?? [];
+      if (!allowedTypes.includes(occurrence.type)) {
+        throw new ForbiddenException('Acesso negado a este recurso');
+      }
+    }
     if (user.role === 'admin') {
       if (occurrence.organizationId !== user.organizationId) {
         throw new ForbiddenException('Acesso negado a este recurso');

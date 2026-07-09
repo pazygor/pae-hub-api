@@ -13,6 +13,13 @@ export const OCCURRENCE_STATUS = ['aberto', 'em atendimento', 'emergência ativa
 export const OCCURRENCE_CRITICALITY = ['baixa', 'média', 'alta', 'crítica'] as const;
 export const SEVERITY_LEVEL = ['baixa', 'média', 'alta'] as const;
 
+// 8 tipos oficiais (espelha o front). Padrão de "Tipos de Ocorrência" visíveis de
+// um usuário novo (todos marcados); vazio = o usuário não vê nenhuma ocorrência.
+export const OCCURRENCE_TYPES = [
+  'Princípio de incêndio', 'Vazamento', 'Emergência', 'Explosão',
+  'Queda de carga', 'Acidente de trabalho', 'Contaminação ambiental', 'Outros',
+] as const;
+
 export const TIMELINE_EVENT_TYPE = [
   'ocorrência registrada', 'equipe acionada', 'plano de emergência ativado',
   'entidade notificada', 'ação executada', 'atualização de status', 'ocorrência resolvida',

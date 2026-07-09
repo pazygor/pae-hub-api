@@ -4,7 +4,7 @@ import { UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { IsEmail, IsIn, IsOptional, IsString, MinLength, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { USER_ROLES, ACCESS_LEVELS } from '../../domain/enums';
+import { USER_ROLES, ACCESS_LEVELS, OCCURRENCE_TYPES } from '../../domain/enums';
 
 export class CreateUserDto {
   @ApiProperty() @IsString() name: string;
@@ -104,7 +104,8 @@ export class UsersService {
         tacticalManagerId: dto.tacticalManagerId,
         allowedModules: dto.allowedModules ?? [],
         allowedTerminals: dto.allowedTerminals ?? [],
-        allowedOccurrenceTypes: dto.allowedOccurrenceTypes ?? [],
+        // Padrão: vê TODOS os tipos (vazio = não vê nenhuma ocorrência).
+        allowedOccurrenceTypes: dto.allowedOccurrenceTypes ?? [...OCCURRENCE_TYPES],
         status: UserStatus.ACTIVE,
         organizationId: requestingUser.organizationId,
         terminalId: dto.terminalId || requestingUser.terminalId,
