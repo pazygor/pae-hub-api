@@ -124,7 +124,8 @@ Quando relevante, cite procedimentos específicos e escalas de prioridade.`;
         tokens: data.usage?.total_tokens ?? 0,
       };
     } catch (error) {
-      this.logger.error(`AI Command error: ${error.message}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`AI Command error: ${msg}`);
       throw error;
     }
   }

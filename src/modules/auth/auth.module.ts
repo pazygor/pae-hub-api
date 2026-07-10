@@ -14,7 +14,9 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: config.get<string>('JWT_EXPIRES_IN', '15m') },
+        // expiresIn aceita duração em string ('15m') em runtime; o tipo StringValue
+        // do jsonwebtoken é estrito demais, então normalizamos com cast.
+        signOptions: { expiresIn: config.get<string>('JWT_EXPIRES_IN', '15m') as any },
       }),
     }),
   ],

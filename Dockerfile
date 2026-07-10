@@ -1,8 +1,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # M1 PAE Hub — API (NestJS + Prisma + PostgreSQL)
-# A API roda via ts-node --transpile-only (mesmo modo do dev): transpila sem
-# type-check, evitando os erros de tipagem estrita que travam o `tsc`. No build
-# só geramos o Prisma Client; migrate deploy + seed acontecem no start.
+# Imagem única: no build gera o Prisma Client e compila o TypeScript (dist) via
+# tsconfig.build.json (exclui testes). No start roda migrate deploy + seed e sobe
+# a partir do dist compilado (node dist/main).
 # ─────────────────────────────────────────────────────────────────────────────
 FROM node:22-bookworm-slim
 
@@ -17,12 +17,13 @@ RUN apt-get update \
 COPY package*.json ./
 RUN npm ci
 
-# Copia o código e gera o Prisma Client.
+# Copia o código, gera o Prisma Client e compila o TypeScript (dist).
 # O `prisma generate` carrega o prisma.config.ts, que exige DATABASE_URL; como
 # generate NÃO conecta no banco, passamos uma URL placeholder só nesse passo.
 # A DATABASE_URL real entra em runtime (via docker-compose).
 COPY . .
-RUN DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder?schema=public" npx prisma generate
+RUN DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder?schema=public" npx prisma generate \
+  && npm run build
 
 # Script de inicialização: migrate deploy (+ seed opcional) e sobe a API
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

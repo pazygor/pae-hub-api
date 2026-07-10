@@ -111,7 +111,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       await client.join(`user:${client.userId}`);
 
       this.connectedClients.set(client.id, {
-        userId: client.userId,
+        userId: client.userId!,
         terminalId: client.terminalId,
         connectedAt: new Date(),
       });
@@ -127,7 +127,8 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
         });
       }
     } catch (error) {
-      this.logger.warn(`Client ${client.id} authentication failed: ${error.message}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Client ${client.id} authentication failed: ${msg}`);
       client.disconnect();
     }
   }
