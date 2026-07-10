@@ -16,9 +16,13 @@ RUN apt-get update \
 COPY package*.json ./
 RUN npm ci
 
-# Copia o código e gera o client Prisma + compila o TypeScript
+# Copia o código e gera o client Prisma + compila o TypeScript.
+# O `prisma generate` carrega o prisma.config.ts, que exige DATABASE_URL; como
+# generate NÃO conecta no banco, passamos uma URL placeholder só nesse passo.
+# A DATABASE_URL real entra em runtime (via docker-compose).
 COPY . .
-RUN npx prisma generate && npm run build
+RUN DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder?schema=public" npx prisma generate \
+  && npm run build
 
 # Script de inicialização: migrate deploy (+ seed opcional) e sobe a API
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
