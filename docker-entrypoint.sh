@@ -15,5 +15,5 @@ if [ "$RUN_SEED" = "true" ]; then
   npm run prisma:seed || echo "⚠ seed falhou ou já aplicado — seguindo."
 fi
 
-echo "▶ Iniciando API..."
-exec node dist/main
+echo "▶ Iniciando API (ts-node --transpile-only)..."
+exec npx ts-node --transpile-only src/main.ts
