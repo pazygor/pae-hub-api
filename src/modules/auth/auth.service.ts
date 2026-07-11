@@ -64,18 +64,34 @@ export class AuthService {
         email: user.email,
         role: user.role,
         accessLevel: user.accessLevel,
-        linkId: user.terminalId,
+        linkId: user.role === 'entity' ? user.entityId : user.terminalId,
         terminalName: user.terminal?.name,
         tacticalManagerId: user.tacticalManagerId,
         organizationId: user.organizationId,
         organizationName: user.organization?.name,
         avatarUrl: user.avatarUrl,
         allowedModules: user.allowedModules,
-        allowedTerminals: user.allowedTerminals,
+        // Entity: terminais visíveis derivam da Permissão (para filtro de notificação no front).
+        allowedTerminals: await this.effectiveAllowedTerminals(user),
         allowedOccurrenceTypes: user.allowedOccurrenceTypes,
         permissions: this.getPermissionsForRole(user.role, user.accessLevel),
       },
     };
+  }
+
+  /** Terminais visíveis do usuário: entity deriva da Permissão da sua entidade;
+   *  demais papéis usam o próprio campo allowedTerminals. */
+  private async effectiveAllowedTerminals(
+    user: { role: string; entityId?: string | null; allowedTerminals?: string[] | null },
+  ): Promise<string[]> {
+    if (user.role === 'entity' && user.entityId) {
+      const perm = await this.prisma.permission.findUnique({
+        where: { entityId: user.entityId },
+        select: { terminalIds: true },
+      });
+      return perm?.terminalIds ?? [];
+    }
+    return user.allowedTerminals ?? [];
   }
 
   async refreshTokens(refreshToken: string) {
@@ -158,7 +174,7 @@ export class AuthService {
       role: user.role,
       accessLevel: user.accessLevel,
       status: user.status,
-      linkId: user.terminalId,
+      linkId: user.role === 'entity' ? user.entityId : user.terminalId,
       terminalName: user.terminal?.name,
       tacticalManagerId: user.tacticalManagerId,
       organizationId: user.organizationId,
@@ -168,7 +184,7 @@ export class AuthService {
       department: user.department,
       lastLoginAt: user.lastLoginAt,
       allowedModules: user.allowedModules,
-      allowedTerminals: user.allowedTerminals,
+      allowedTerminals: await this.effectiveAllowedTerminals(user),
       allowedOccurrenceTypes: user.allowedOccurrenceTypes,
       permissions: this.getPermissionsForRole(user.role, user.accessLevel),
     };

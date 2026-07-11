@@ -93,20 +93,20 @@ enum KnowledgeEntryType {
 // ─── Organization & Terminal ──────────────────────────────────────────────────
 
 model Organization {
-  id          String   @id @default(uuid())
-  name        String   @db.VarChar(255)
-  slug        String   @unique @db.VarChar(100)
-  description String?  @db.Text
-  logoUrl     String?  @db.VarChar(500)
-  isActive    Boolean  @default(true)
+  id            String   @id @default(uuid())
+  name          String   @db.VarChar(255)
+  slug          String   @unique @db.VarChar(100)
+  description   String?  @db.Text
+  logoUrl       String?  @db.VarChar(500)
+  isActive      Boolean  @default(true)
   // Contador atômico do INC-#### sequencial por organização (Fase 2)
-  occurrenceSeq Int    @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  occurrenceSeq Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  terminals      Terminal[]
-  users          User[]
-  entities       Entity[]
+  terminals       Terminal[]
+  users           User[]
+  entities        Entity[]
   occurrences     Occurrence[]
   risks           Risk[]
   emergencyPlans  EmergencyPlan[]
@@ -135,6 +135,7 @@ model Entity {
   permission          Permission?
   notificationRules   NotificationRule[]
   entityNotifications EntityNotification[]
+  users               User[]
 
   @@index([organizationId])
   @@map("entities")
@@ -428,15 +429,16 @@ model Terminal {
 // ─── Users & Auth ─────────────────────────────────────────────────────────────
 
 model User {
-  id             String     @id @default(uuid())
-  organizationId String
-  terminalId     String?
+  id                     String     @id @default(uuid())
+  organizationId         String
+  terminalId             String?
+  entityId               String? // vínculo do usuário-entidade (role 'entity') → Entity
   name                   String     @db.VarChar(255)
   email                  String     @unique @db.VarChar(255)
   passwordHash           String     @db.VarChar(255)
   role                   String     @default("terminal") @db.VarChar(20) // admin | terminal | entity
-  accessLevel            String?    @db.VarChar(20)                       // estratégico | tático | operacional
-  tacticalManagerId      String?                                         // Operacional → Tático
+  accessLevel            String?    @db.VarChar(20) // estratégico | tático | operacional
+  tacticalManagerId      String? // Operacional → Tático
   allowedModules         String[]   @default([])
   allowedTerminals       String[]   @default([])
   allowedOccurrenceTypes String[]   @default([])
@@ -450,39 +452,41 @@ model User {
 
   organization     Organization @relation(fields: [organizationId], references: [id])
   terminal         Terminal?    @relation(fields: [terminalId], references: [id])
+  entity           Entity?      @relation(fields: [entityId], references: [id])
   tacticalManager  User?        @relation("TacticalTeam", fields: [tacticalManagerId], references: [id])
   managedOperators User[]       @relation("TacticalTeam")
 
-  refreshTokens        RefreshToken[]
-  reportedOccurrences  Occurrence[]         @relation("ReportedBy")
-  timelineEvents       OccurrenceTimeline[]
-  chatMessages         ChatMessage[]
-  userTrainings        UserTraining[]
-  userEpis             UserEpi[]
-  warRoomParticipants  WarRoomParticipant[]
-  warRoomMessages      WarRoomMessage[]
-  warRoomDecisions     WarRoomDecision[]
-  acknowledgedAlerts   Alert[]              @relation("AcknowledgedBy")
-  resolvedAlerts       Alert[]              @relation("ResolvedBy")
-  safetyItems          SafetyItem[]
-  auditLogs            AuditLog[]
-  aiInsights           AgentInsight[]
-  knowledgeEntries     KnowledgeEntry[]
-  promptEvaluations    PromptEvaluation[]
-  aiFeedback           AiFeedback[]
+  refreshTokens       RefreshToken[]
+  reportedOccurrences Occurrence[]         @relation("ReportedBy")
+  timelineEvents      OccurrenceTimeline[]
+  chatMessages        ChatMessage[]
+  userTrainings       UserTraining[]
+  userEpis            UserEpi[]
+  warRoomParticipants WarRoomParticipant[]
+  warRoomMessages     WarRoomMessage[]
+  warRoomDecisions    WarRoomDecision[]
+  acknowledgedAlerts  Alert[]              @relation("AcknowledgedBy")
+  resolvedAlerts      Alert[]              @relation("ResolvedBy")
+  safetyItems         SafetyItem[]
+  auditLogs           AuditLog[]
+  aiInsights          AgentInsight[]
+  knowledgeEntries    KnowledgeEntry[]
+  promptEvaluations   PromptEvaluation[]
+  aiFeedback          AiFeedback[]
 
   @@index([organizationId])
   @@index([terminalId])
+  @@index([entityId])
   @@index([email])
   @@map("users")
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  token     String   @unique @db.VarChar(512)
+  token     String    @unique @db.VarChar(512)
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
   revokedAt DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -519,8 +523,8 @@ model Occurrence {
   type             String    @db.VarChar(100) // tipo de ocorrência (livre, como no front)
   description      String    @db.Text
   status           String    @default("aberto") @db.VarChar(30) // aberto | em atendimento | emergência ativa | resolvido
-  criticality      String    @default("média") @db.VarChar(20)  // baixa | média | alta | crítica
-  severity         String?   @db.VarChar(20)                    // baixa | média | alta (obrigatória no despacho)
+  criticality      String    @default("média") @db.VarChar(20) // baixa | média | alta | crítica
+  severity         String?   @db.VarChar(20) // baixa | média | alta (obrigatória no despacho)
   responsible      String?   @db.VarChar(255)
   team             String?   @db.VarChar(255)
   location         String?   @db.VarChar(255)
@@ -594,14 +598,14 @@ model Evidence {
 }
 
 model ChecklistItem {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   occurrenceId String
-  title        String   @db.VarChar(255)
-  isCompleted  Boolean  @default(false)
+  title        String    @db.VarChar(255)
+  isCompleted  Boolean   @default(false)
   completedAt  DateTime?
-  completedBy  String?  @db.VarChar(255)
-  order        Int      @default(0)
-  createdAt    DateTime @default(now())
+  completedBy  String?   @db.VarChar(255)
+  order        Int       @default(0)
+  createdAt    DateTime  @default(now())
 
   occurrence Occurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
 
@@ -612,28 +616,28 @@ model ChecklistItem {
 // ─── Alerts ──────────────────────────────────────────────────────────────────
 
 model Alert {
-  id               String      @id @default(uuid())
+  id               String        @id @default(uuid())
   terminalId       String
   occurrenceId     String?
-  title            String      @db.VarChar(255)
-  message          String      @db.Text
-  type             AlertType   @default(OPERATIONAL)
+  title            String        @db.VarChar(255)
+  message          String        @db.Text
+  type             AlertType     @default(OPERATIONAL)
   severity         AlertSeverity @default(MEDIUM)
-  status           AlertStatus @default(ACTIVE)
-  source           String?     @db.VarChar(100)
+  status           AlertStatus   @default(ACTIVE)
+  source           String?       @db.VarChar(100)
   acknowledgedById String?
   acknowledgedAt   DateTime?
   resolvedById     String?
   resolvedAt       DateTime?
   expiresAt        DateTime?
   metadata         Json?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
-  terminal        Terminal    @relation(fields: [terminalId], references: [id])
-  occurrence      Occurrence? @relation(fields: [occurrenceId], references: [id])
-  acknowledgedBy  User?       @relation("AcknowledgedBy", fields: [acknowledgedById], references: [id])
-  resolvedBy      User?       @relation("ResolvedBy", fields: [resolvedById], references: [id])
+  terminal       Terminal    @relation(fields: [terminalId], references: [id])
+  occurrence     Occurrence? @relation(fields: [occurrenceId], references: [id])
+  acknowledgedBy User?       @relation("AcknowledgedBy", fields: [acknowledgedById], references: [id])
+  resolvedBy     User?       @relation("ResolvedBy", fields: [resolvedById], references: [id])
 
   @@index([terminalId])
   @@index([status])
@@ -665,10 +669,10 @@ model WarRoom {
 }
 
 model WarRoomParticipant {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   warRoomId String
   userId    String
-  joinedAt  DateTime @default(now())
+  joinedAt  DateTime  @default(now())
   leftAt    DateTime?
 
   warRoom WarRoom @relation(fields: [warRoomId], references: [id], onDelete: Cascade)

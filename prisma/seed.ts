@@ -211,9 +211,11 @@ async function main() {
 
   const bombeiroUser = await prisma.user.upsert({
     where: { email: 'bombeiro@gov.br' },
-    update: {},
+    update: { entityId: ent.bombeiros.id }, // backfill do vínculo em re-seed
     create: {
       organizationId: org.id, terminalId: null,
+      // Vínculo com a entidade → visibilidade derivada da Permissão (Bombeiros).
+      entityId: ent.bombeiros.id,
       name: 'Oficial Bombeiro', email: 'bombeiro@gov.br',
       passwordHash: await hash('entity123'),
       role: 'entity', accessLevel: null, status: UserStatus.ACTIVE,

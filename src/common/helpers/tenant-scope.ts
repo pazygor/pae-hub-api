@@ -10,6 +10,16 @@ import { PrismaService } from '../../prisma/prisma.service';
  * - admin: organização inteira (a lista, se preenchida, apenas estreita);
  * - entity: não tem casa → vê só os terminais autorizados na lista.
  */
+/** Terminais que um usuário-entidade enxerga = terminalIds da Permissão da sua
+ *  entidade (via user.entityId). Sem entityId ou sem Permissão → lista vazia. */
+export async function entityPermittedTerminals(prisma: PrismaService, user: any): Promise<string[]> {
+  const entityId = user.entityId
+    ?? (await prisma.user.findUnique({ where: { id: user.id }, select: { entityId: true } }))?.entityId;
+  if (!entityId) return [];
+  const perm = await prisma.permission.findUnique({ where: { entityId }, select: { terminalIds: true } });
+  return perm?.terminalIds ?? [];
+}
+
 export function terminalIdsForUser(user: any): string[] {
   const allowed: string[] = user.allowedTerminals ?? [];
   if (user.role === 'terminal') {
@@ -32,10 +42,9 @@ export async function tenantScope(prisma: PrismaService, user: any): Promise<Rec
     return { organizationId: user.organizationId, terminalId: { in: ids.length ? ids : ['—'] } };
   }
 
-  // entity: os terminais autorizados são o próprio whitelist (sem casa).
-  const entityTerminals = allowed.length
-    ? allowed
-    : (await prisma.user.findUnique({ where: { id: user.id }, select: { allowedTerminals: true } }))?.allowedTerminals ?? [];
+  // entity: vê os terminais autorizados na PERMISSÃO da sua entidade (fonte única
+  // de verdade — a Permissão entidade↔terminais). Requer o vínculo user.entityId.
+  const entityTerminals = await entityPermittedTerminals(prisma, user);
   return { terminalId: { in: entityTerminals.length ? entityTerminals : ['—'] } };
 }
 

@@ -13,6 +13,8 @@ export class CreateUserDto {
   @ApiPropertyOptional({ enum: USER_ROLES }) @IsOptional() @IsIn([...USER_ROLES]) role?: string;
   @ApiPropertyOptional({ enum: ACCESS_LEVELS }) @IsOptional() @IsIn([...ACCESS_LEVELS]) accessLevel?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() terminalId?: string;
+  @ApiPropertyOptional({ description: 'Vínculo do usuário-entidade (role = entity) → Entity' })
+  @IsOptional() @IsString() entityId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() tacticalManagerId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() phone?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
@@ -47,7 +49,7 @@ export class UsersService {
         orderBy: { name: 'asc' },
         select: {
           id: true, name: true, email: true, role: true, accessLevel: true, status: true,
-          terminalId: true, tacticalManagerId: true,
+          terminalId: true, entityId: true, tacticalManagerId: true,
           allowedModules: true, allowedTerminals: true, allowedOccurrenceTypes: true,
           phone: true, department: true, avatarUrl: true, lastLoginAt: true, createdAt: true,
           terminal: { select: { id: true, name: true } },
@@ -77,7 +79,7 @@ export class UsersService {
       where: { id },
       select: {
         id: true, name: true, email: true, role: true, accessLevel: true, status: true,
-        terminalId: true, tacticalManagerId: true,
+        terminalId: true, entityId: true, tacticalManagerId: true,
         allowedModules: true, allowedTerminals: true, allowedOccurrenceTypes: true,
         phone: true, department: true, avatarUrl: true, lastLoginAt: true, createdAt: true,
         terminal: { select: { id: true, name: true } },
@@ -94,12 +96,15 @@ export class UsersService {
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
 
+    const role = dto.role || 'terminal';
+    const isEntity = role === 'entity';
+
     const user = await this.prisma.user.create({
       data: {
         name: dto.name,
         email: dto.email.toLowerCase(),
         passwordHash,
-        role: dto.role || 'terminal',
+        role,
         accessLevel: dto.accessLevel,
         tacticalManagerId: dto.tacticalManagerId,
         allowedModules: dto.allowedModules ?? [],
@@ -108,7 +113,9 @@ export class UsersService {
         allowedOccurrenceTypes: dto.allowedOccurrenceTypes ?? [...OCCURRENCE_TYPES],
         status: UserStatus.ACTIVE,
         organizationId: requestingUser.organizationId,
-        terminalId: dto.terminalId || requestingUser.terminalId,
+        // Entidade: vincula à Entity (entityId) e NÃO herda terminal.
+        terminalId: isEntity ? null : (dto.terminalId || requestingUser.terminalId),
+        entityId: isEntity ? (dto.entityId ?? null) : null,
         phone: dto.phone,
         department: dto.department,
       },
@@ -129,9 +136,16 @@ export class UsersService {
     if (dto.name) data.name = dto.name;
     if (dto.phone !== undefined) data.phone = dto.phone;
     if (dto.department !== undefined) data.department = dto.department;
-    if (dto.role) data.role = dto.role;
+    // Papel e vínculo são mutuamente exclusivos: entity usa entityId (sem terminal);
+    // terminal/admin usam terminalId (sem entity).
+    if (dto.role) {
+      data.role = dto.role;
+      if (dto.role === 'entity') data.terminalId = null;
+      else data.entityId = null;
+    }
     if (dto.accessLevel !== undefined) data.accessLevel = dto.accessLevel;
     if (dto.terminalId) data.terminalId = dto.terminalId;
+    if (dto.entityId !== undefined) data.entityId = dto.entityId;
     if (dto.tacticalManagerId !== undefined) data.tacticalManagerId = dto.tacticalManagerId;
     if (dto.allowedModules !== undefined) data.allowedModules = dto.allowedModules;
     if (dto.allowedTerminals !== undefined) data.allowedTerminals = dto.allowedTerminals;
@@ -143,7 +157,7 @@ export class UsersService {
       data,
       select: {
         id: true, name: true, email: true, role: true, accessLevel: true, status: true,
-        terminalId: true, tacticalManagerId: true,
+        terminalId: true, entityId: true, tacticalManagerId: true,
         allowedModules: true, allowedTerminals: true, allowedOccurrenceTypes: true,
         phone: true, department: true,
       },

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway, CopEventType } from '../realtime/realtime.gateway';
-import { tenantScope, userCanAccessTerminal } from '../../common/helpers/tenant-scope';
+import { tenantScope, userCanAccessTerminal, entityPermittedTerminals } from '../../common/helpers/tenant-scope';
 import { OCCURRENCE_CHECKLIST_TEMPLATE } from '../../domain/enums';
 import {
   CreateOccurrenceDto,
@@ -167,6 +167,13 @@ export class EmergencyService {
       occurrenceId: occurrence.id,
       incNumber: occurrence.incNumber,
       status: occurrence.status,
+      actorId: user.id, // quem criou (front evita alerta para o próprio autor)
+      type: occurrence.type,
+      description: occurrence.description ?? null,
+      severity: occurrence.severity ?? null,
+      criticality: occurrence.criticality,
+      terminalId: occurrence.terminalId,
+      terminalName: occurrence.terminal?.name ?? null,
     });
 
     return result;
@@ -175,7 +182,11 @@ export class EmergencyService {
   /** Cruza NotificationRule (tipo de ocorrência) × Permission (terminal) e cria
    *  as EntityNotifications + eventos 'entidade notificada' na timeline. */
   private async autoDispatchEntities(
-    occurrence: { id: string; type: string; terminalId: string; organizationId: string },
+    occurrence: {
+      id: string; type: string; terminalId: string; organizationId: string;
+      incNumber?: string; severity?: string | null; criticality?: string;
+      terminal?: { name?: string | null } | null;
+    },
     user: any,
   ) {
     const rules = await this.prisma.notificationRule.findMany({
@@ -210,7 +221,14 @@ export class EmergencyService {
       this.realtime.emitToOrganization(occurrence.organizationId, CopEventType.NOTIFICATION_CREATED, {
         occurrenceId: occurrence.id,
         entityId: rule.entityId,
+        entityName: rule.entity.name,
         mandatory: rule.mandatory,
+        incNumber: occurrence.incNumber ?? null,
+        type: occurrence.type,
+        severity: occurrence.severity ?? null,
+        criticality: occurrence.criticality ?? null,
+        terminalId: occurrence.terminalId,
+        terminalName: occurrence.terminal?.name ?? null,
       });
     }
 
@@ -441,9 +459,8 @@ export class EmergencyService {
       }
       return;
     }
-    const allowedEntity: string[] = user.allowedTerminals?.length
-      ? user.allowedTerminals
-      : (await this.prisma.user.findUnique({ where: { id: user.id }, select: { allowedTerminals: true } }))?.allowedTerminals ?? [];
+    // entity: acesso derivado da Permissão da sua entidade (via entityId).
+    const allowedEntity = await entityPermittedTerminals(this.prisma, user);
     if (!allowedEntity.includes(occurrence.terminalId)) {
       throw new ForbiddenException('Acesso negado a este recurso');
     }
