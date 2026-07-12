@@ -488,6 +488,7 @@ export class EmergencyService {
       severity: o.severity ?? undefined,
       responsible: o.responsible ?? '',
       team: o.team ?? '',
+      reportedByUserId: o.reportedByUserId ?? undefined,
       location: o.location ?? undefined,
       latitude: o.latitude ?? undefined,
       longitude: o.longitude ?? undefined,

@@ -43,6 +43,14 @@ export class AuthController {
     return this.authService.getMe(userId);
   }
 
+  @Post('alerts-seen')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Marca os alertas de ocorrência como vistos (agora)' })
+  markAlertsSeen(@CurrentUser('id') userId: string) {
+    return this.authService.markAlertsSeen(userId);
+  }
+
   @Post('change-password')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)

@@ -70,6 +70,7 @@ export class AuthService {
         organizationId: user.organizationId,
         organizationName: user.organization?.name,
         avatarUrl: user.avatarUrl,
+        alertsSeenAt: user.alertsSeenAt,
         allowedModules: user.allowedModules,
         // Entity: terminais visíveis derivam da Permissão (para filtro de notificação no front).
         allowedTerminals: await this.effectiveAllowedTerminals(user),
@@ -183,11 +184,25 @@ export class AuthService {
       phone: user.phone,
       department: user.department,
       lastLoginAt: user.lastLoginAt,
+      alertsSeenAt: user.alertsSeenAt,
       allowedModules: user.allowedModules,
       allowedTerminals: await this.effectiveAllowedTerminals(user),
       allowedOccurrenceTypes: user.allowedOccurrenceTypes,
       permissions: this.getPermissionsForRole(user.role, user.accessLevel),
     };
+  }
+
+  /**
+   * Marca os alertas de ocorrência como vistos (agora). Chamado pelo front ao
+   * fechar o modal de alerta — o próximo login só re-alerta o que vier depois.
+   */
+  async markAlertsSeen(userId: string) {
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { alertsSeenAt: new Date() },
+      select: { alertsSeenAt: true },
+    });
+    return updated;
   }
 
   private async generateTokens(user: { id: string; email: string; role: string; accessLevel?: string | null; terminalId?: string | null; organizationId: string }) {

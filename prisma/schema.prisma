@@ -447,6 +447,7 @@ model User {
   phone                  String?    @db.VarChar(50)
   department             String?    @db.VarChar(100)
   lastLoginAt            DateTime?
+  alertsSeenAt           DateTime? // último "visto" dos alertas de ocorrência (re-hidratação no login)
   createdAt              DateTime   @default(now())
   updatedAt              DateTime   @updatedAt
 
