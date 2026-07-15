@@ -3,7 +3,6 @@ import { NotFoundException, ForbiddenException, BadRequestException } from '@nes
 import { EmergencyService } from './emergency.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway, CopEventType } from '../realtime/realtime.gateway';
-import { OCCURRENCE_CHECKLIST_TEMPLATE } from '../../domain/enums';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EmergencyService — coração do PAE (fluxo-de-funcionamento §6.2/§6.3/§6.5):
@@ -82,13 +81,12 @@ describe('EmergencyService', () => {
       mockPrisma.occurrence.findUnique.mockResolvedValue(createdOccurrence());
     });
 
-    it('semeia a timeline "ocorrência registrada" e o checklist de 8 passos', async () => {
+    it('semeia a timeline "ocorrência registrada" e NÃO semeia checklist (vem do plano ativado — Fase 10)', async () => {
       await service.create({ type: 'Emergência', description: 'Incêndio na correia' } as any, taticoUser);
 
       const data = mockPrisma.occurrence.create.mock.calls[0][0].data;
       expect(data.timeline.create.eventType).toBe('ocorrência registrada');
-      expect(data.checklist.create).toHaveLength(OCCURRENCE_CHECKLIST_TEMPLATE.length);
-      expect(data.checklist.create).toHaveLength(8);
+      expect(data.checklist).toBeUndefined();
     });
 
     it('aplica os defaults status "aberto" e criticidade "média" quando não informados', async () => {

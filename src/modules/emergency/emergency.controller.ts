@@ -5,6 +5,7 @@ import {
   CreateOccurrenceDto,
   UpdateOccurrenceDto,
   UpdateOccurrenceStatusDto,
+  ActivatePlanDto,
   CreateTimelineEventDto,
   CreateChecklistItemDto,
   UpdateChecklistItemDto,
@@ -55,6 +56,13 @@ export class EmergencyController {
   @ApiOperation({ summary: 'Atualizar status (gera evento na timeline; resolvido grava resolvedAt)' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdateOccurrenceStatusDto, @CurrentUser() user: any) {
     return this.service.updateStatus(id, dto, user);
+  }
+
+  @Post(':id/activate-plan')
+  @Roles('admin', 'terminal')
+  @ApiOperation({ summary: 'Ativar um Plano de Ação (aplica o checklist do plano à ocorrência)' })
+  activatePlan(@Param('id') id: string, @Body() dto: ActivatePlanDto, @CurrentUser() user: any) {
+    return this.service.activatePlan(id, dto.planId, user);
   }
 
   @Post(':id/timeline')

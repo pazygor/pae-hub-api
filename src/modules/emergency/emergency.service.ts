@@ -2,7 +2,6 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException,
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway, CopEventType } from '../realtime/realtime.gateway';
 import { tenantScope, userCanAccessTerminal, entityPermittedTerminals } from '../../common/helpers/tenant-scope';
-import { OCCURRENCE_CHECKLIST_TEMPLATE } from '../../domain/enums';
 import {
   CreateOccurrenceDto,
   UpdateOccurrenceDto,
@@ -134,10 +133,8 @@ export class EmergencyService {
             description: dto.description,
           },
         },
-        // Funcional §3.3: checklist de 8 passos nasce com a ocorrência
-        checklist: {
-          create: OCCURRENCE_CHECKLIST_TEMPLATE.map((text, i) => ({ title: text, order: i })),
-        },
+        // Fase 10: o checklist de resposta passa a vir do Plano de Ação ativado
+        // pelo usuário (não mais um template fixo semeado na criação).
       },
       include: {
         terminal: { select: { id: true, name: true } },
@@ -289,6 +286,60 @@ export class EmergencyService {
     });
 
     return this.formatOccurrence(updated);
+  }
+
+  /**
+   * Ativa um Plano de Ação na ocorrência: o CHECKLIST do plano escolhido passa a
+   * ser o checklist de resposta da ocorrência (substitui o atual) e registra o
+   * evento na timeline. Só aceita plano ATIVO do mesmo terminal — o usuário
+   * escolhe qual (não mais fixo). **Não mexe no status** da ocorrência: ativar
+   * plano e ciclo de atendimento (aberto/em atendimento/…) são independentes.
+   */
+  async activatePlan(id: string, planId: string, user: any) {
+    const occurrence = await this.findOneRaw(id);
+    await this.checkTenantAccess(occurrence, user);
+
+    const plan = await this.prisma.emergencyPlan.findFirst({
+      where: { id: planId, organizationId: user.organizationId, terminalId: occurrence.terminalId, status: 'ativo' },
+    });
+    if (!plan) throw new BadRequestException('Plano inválido ou não é um plano ativo deste terminal');
+
+    const steps = Array.isArray(plan.checklist) ? (plan.checklist as any[]) : [];
+    const items = steps
+      .filter((s) => s && typeof s.text === 'string' && s.text.trim())
+      .map((s, i) => ({ title: String(s.text).slice(0, 255), order: i }));
+
+    await this.prisma.occurrence.update({
+      where: { id },
+      data: {
+        updatedAt: new Date(),
+        // Substitui o checklist da ocorrência pelos passos do plano escolhido.
+        checklist: { deleteMany: {}, create: items },
+        timeline: {
+          create: {
+            userId: user.id,
+            eventType: 'plano de emergência ativado',
+            description: `${plan.name} ativado — resposta de emergência iniciada`,
+          },
+        },
+      },
+    });
+
+    this.realtime.emitToOrganization(occurrence.organizationId, CopEventType.TIMELINE_ADDED, {
+      occurrenceId: id,
+      type: 'plano de emergência ativado',
+    });
+
+    return this.formatOccurrenceDetail(
+      await this.prisma.occurrence.findUnique({
+        where: { id },
+        include: {
+          terminal: { select: { id: true, name: true } },
+          timeline: { orderBy: { createdAt: 'asc' }, include: { user: { select: { name: true } } } },
+          checklist: { orderBy: { order: 'asc' } },
+        },
+      }),
+    );
   }
 
   // ── Timeline (imutável — só INSERT) ────────────────────────────────────────

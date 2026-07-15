@@ -67,6 +67,12 @@ export class UpdateOccurrenceStatusDto {
   comment?: string;
 }
 
+export class ActivatePlanDto {
+  @ApiProperty({ description: 'ID do plano de ação (ativo, do terminal da ocorrência) a ativar' })
+  @IsString() @IsNotEmpty()
+  planId!: string;
+}
+
 export class CreateTimelineEventDto {
   @ApiProperty({ enum: TIMELINE_EVENT_TYPE })
   @IsIn([...TIMELINE_EVENT_TYPE])
