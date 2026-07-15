@@ -29,6 +29,10 @@ class CreatePlanDto {
 
   @ApiPropertyOptional({ description: 'Obrigatório para admin' }) @IsOptional() @IsString()
   terminalId?: string;
+
+  @ApiPropertyOptional({ description: 'IDs dos riscos aos quais o plano responde' })
+  @IsOptional() @IsArray() @IsString({ each: true })
+  riskIds?: string[];
 }
 class UpdatePlanDto extends PartialType(CreatePlanDto) {}
 
@@ -46,7 +50,23 @@ export class EmergencyPlansService {
       responsible: p.responsible ?? '',
       checklist: Array.isArray(p.checklist) ? p.checklist : [],
       status: p.status,
+      riskIds: Array.isArray(p.planRisks) ? p.planRisks.map((pr: any) => pr.riskId) : [],
     };
+  }
+
+  private readonly includeRel = {
+    terminal: { select: { name: true } },
+    planRisks: { select: { riskId: true } },
+  };
+
+  /** Mantém apenas riskIds que existem no MESMO terminal/organização do plano. */
+  private async validRiskIds(organizationId: string, terminalId: string, riskIds?: string[]) {
+    if (!Array.isArray(riskIds) || riskIds.length === 0) return [];
+    const found = await this.prisma.risk.findMany({
+      where: { organizationId, terminalId, id: { in: riskIds } },
+      select: { id: true },
+    });
+    return found.map((r) => r.id);
   }
 
   async findAll(user: any) {
@@ -54,7 +74,7 @@ export class EmergencyPlansService {
     const plans = await this.prisma.emergencyPlan.findMany({
       where,
       orderBy: { createdAt: 'asc' },
-      include: { terminal: { select: { name: true } } },
+      include: this.includeRel,
     });
     return plans.map((p) => this.format(p));
   }
@@ -62,6 +82,7 @@ export class EmergencyPlansService {
   async create(dto: CreatePlanDto, user: any) {
     const terminalId = await resolveTerminalId(this.prisma, user, dto.terminalId);
     if (!terminalId) throw new BadRequestException('Terminal inválido para esta organização');
+    const riskIds = await this.validRiskIds(user.organizationId, terminalId, dto.riskIds);
     const plan = await this.prisma.emergencyPlan.create({
       data: {
         organizationId: user.organizationId,
@@ -71,22 +92,31 @@ export class EmergencyPlansService {
         responsible: dto.responsible,
         checklist: this.sanitizeChecklist(dto.checklist),
         status: dto.status ?? 'ativo',
+        planRisks: { create: riskIds.map((riskId) => ({ riskId })) },
       },
-      include: { terminal: { select: { name: true } } },
+      include: this.includeRel,
     });
     return this.format(plan);
   }
 
   async update(id: string, dto: UpdatePlanDto, user: any) {
     const plan = await this.findOwned(id, user);
-    const { terminalId: _t, checklist, ...fields } = dto;
+    const { terminalId: _t, checklist, riskIds, ...fields } = dto;
     const updated = await this.prisma.emergencyPlan.update({
       where: { id: plan.id },
       data: {
         ...fields,
         ...(checklist !== undefined ? { checklist: this.sanitizeChecklist(checklist) } : {}),
+        ...(riskIds !== undefined
+          ? {
+              planRisks: {
+                deleteMany: {},
+                create: (await this.validRiskIds(user.organizationId, plan.terminalId, riskIds)).map((riskId) => ({ riskId })),
+              },
+            }
+          : {}),
       },
-      include: { terminal: { select: { name: true } } },
+      include: this.includeRel,
     });
     return this.format(updated);
   }

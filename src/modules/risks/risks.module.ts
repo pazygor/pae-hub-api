@@ -1,6 +1,6 @@
 import { Module, Injectable, NotFoundException, ForbiddenException, BadRequestException, Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsIn, MaxLength, IsDateString } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsIn, MaxLength, IsDateString, IsNumber } from 'class-validator';
 import { PartialType } from '@nestjs/swagger';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -30,6 +30,15 @@ class CreateRiskDto {
 
   @ApiPropertyOptional({ description: 'Obrigatório para admin' }) @IsOptional() @IsString()
   terminalId?: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsNumber() lat?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() lng?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() cep?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() street?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() number?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() neighborhood?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() city?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() state?: string;
 }
 class UpdateRiskDto extends PartialType(CreateRiskDto) {}
 
@@ -47,6 +56,14 @@ export class RisksService {
       level: r.level,
       affectedArea: r.affectedArea ?? '',
       date: r.date,
+      lat: r.latitude ?? 0,
+      lng: r.longitude ?? 0,
+      cep: r.cep ?? '',
+      street: r.street ?? '',
+      number: r.number ?? '',
+      neighborhood: r.neighborhood ?? '',
+      city: r.city ?? '',
+      state: r.state ?? '',
     };
   }
 
@@ -72,6 +89,9 @@ export class RisksService {
         level: dto.level ?? 'médio',
         affectedArea: dto.affectedArea,
         date: dto.date ? new Date(dto.date) : new Date(),
+        latitude: dto.lat, longitude: dto.lng,
+        cep: dto.cep, street: dto.street, number: dto.number,
+        neighborhood: dto.neighborhood, city: dto.city, state: dto.state,
       },
       include: { terminal: { select: { name: true } } },
     });
@@ -80,10 +100,15 @@ export class RisksService {
 
   async update(id: string, dto: UpdateRiskDto, user: any) {
     const risk = await this.findOwned(id, user);
-    const { terminalId: _t, date, ...fields } = dto;
+    const { terminalId: _t, date, lat, lng, ...fields } = dto;
     const updated = await this.prisma.risk.update({
       where: { id: risk.id },
-      data: { ...fields, ...(date ? { date: new Date(date) } : {}) },
+      data: {
+        ...fields,
+        ...(date ? { date: new Date(date) } : {}),
+        ...(lat !== undefined ? { latitude: lat } : {}),
+        ...(lng !== undefined ? { longitude: lng } : {}),
+      },
       include: { terminal: { select: { name: true } } },
     });
     return this.format(updated);

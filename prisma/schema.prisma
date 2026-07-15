@@ -173,12 +173,21 @@ model Risk {
   description    String   @db.Text
   level          String   @default("médio") @db.VarChar(10) // baixo | médio | alto
   affectedArea   String?  @db.VarChar(255)
+  latitude       Float?
+  longitude      Float?
+  cep            String?  @db.VarChar(9)
+  street         String?  @db.VarChar(255)
+  number         String?  @db.VarChar(20)
+  neighborhood   String?  @db.VarChar(120)
+  city           String?  @db.VarChar(120)
+  state          String?  @db.VarChar(2)
   date           DateTime @default(now())
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
   terminal     Terminal     @relation(fields: [terminalId], references: [id])
+  planRisks    PlanRisk[]
 
   @@index([organizationId])
   @@index([terminalId])
@@ -200,10 +209,23 @@ model EmergencyPlan {
 
   organization Organization @relation(fields: [organizationId], references: [id])
   terminal     Terminal     @relation(fields: [terminalId], references: [id])
+  planRisks    PlanRisk[]
 
   @@index([organizationId])
   @@index([terminalId])
   @@map("emergency_plans")
+}
+
+// Junção N–N entre Plano de Ação e Riscos (Fase 9): a quais riscos o plano responde.
+model PlanRisk {
+  planId String
+  riskId String
+  plan   EmergencyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  risk   Risk          @relation(fields: [riskId], references: [id], onDelete: Cascade)
+
+  @@id([planId, riskId])
+  @@index([riskId])
+  @@map("plan_risks")
 }
 
 model MapElement {
