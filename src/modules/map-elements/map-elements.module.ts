@@ -30,6 +30,13 @@ class CreateMapElementDto {
 
   @ApiPropertyOptional({ description: 'Obrigatório para admin' }) @IsOptional() @IsString()
   terminalId?: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() cep?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() street?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() number?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() neighborhood?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() city?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() state?: string;
 }
 class UpdateMapElementDto extends PartialType(CreateMapElementDto) {}
 
@@ -46,6 +53,12 @@ export class MapElementsService {
       lat: el.latitude,
       lng: el.longitude,
       description: el.description ?? '',
+      cep: el.cep ?? '',
+      street: el.street ?? '',
+      number: el.number ?? '',
+      neighborhood: el.neighborhood ?? '',
+      city: el.city ?? '',
+      state: el.state ?? '',
     };
   }
 
@@ -67,6 +80,8 @@ export class MapElementsService {
         latitude: dto.lat,
         longitude: dto.lng,
         description: dto.description,
+        cep: dto.cep, street: dto.street, number: dto.number,
+        neighborhood: dto.neighborhood, city: dto.city, state: dto.state,
       },
     });
     return this.format(el);

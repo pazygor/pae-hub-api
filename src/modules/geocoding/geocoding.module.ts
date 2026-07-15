@@ -42,16 +42,53 @@ async function fetchJson(url: string, opts: { headers?: Record<string, string>; 
 export class GeocodingService {
   private readonly logger = new Logger(GeocodingService.name);
 
-  /** Ponto de entrada: resolve coords a partir de CEP e/ou endereço estruturado. */
+  /**
+   * Ponto de entrada: resolve coords a partir de CEP e/ou endereço estruturado.
+   *
+   * Precisão por NÚMERO (Fase 6): quando há número + rua + cidade, geocodifica o
+   * endereço COMPLETO no Nominatim primeiro — isso cai na quadra/porta, não no
+   * centroide do CEP. O CEP é usado para (a) completar rua/cidade quando faltarem e
+   * (b) servir de fallback (centroide) caso o Nominatim não encontre o número.
+   */
   async resolveCoordinates(input: {
     cep?: string; street?: string; number?: string; neighborhood?: string; city?: string; state?: string;
   }): Promise<Coordinates | null> {
-    if (input.cep && input.cep.replace(/\D/g, '').length === 8) {
-      const byCep = await this.geocodeCep(input.cep);
-      if (byCep) return byCep;
+    const cepClean = input.cep?.replace(/\D/g, '') ?? '';
+    const hasCep = cepClean.length === 8;
+
+    let street = clean(input.street);
+    let neighborhood = clean(input.neighborhood);
+    let city = clean(input.city);
+    let state = clean(input.state);
+    let cepCentroid: Coordinates | null = null;
+
+    // (a) Completa o endereço pelo CEP quando faltar rua/cidade — necessário para
+    // conseguir geocodificar com precisão por número.
+    if (hasCep && (!street || !city)) {
+      const fromCep = await this.cepData(cepClean);
+      street = street ?? fromCep.address?.street;
+      neighborhood = neighborhood ?? fromCep.address?.neighborhood;
+      city = city ?? fromCep.address?.city;
+      state = state ?? fromCep.address?.state;
+      cepCentroid = fromCep.coords;
     }
-    const query = [input.street, input.number, input.neighborhood, input.city, input.state, 'Brasil']
-      .filter(Boolean).join(', ');
+
+    // Endereço completo COM número → ponto mais preciso (Nominatim).
+    const number = clean(input.number);
+    if (number && street && city) {
+      const full = [street, number, neighborhood, city, state, 'Brasil'].filter(Boolean).join(', ');
+      const byNumber = await this.geocodeAddress(full);
+      if (byNumber) return byNumber;
+    }
+
+    // Sem número (ou número não encontrado): centroide do CEP.
+    if (hasCep) {
+      const centroid = cepCentroid ?? (await this.cepData(cepClean)).coords;
+      if (centroid) return centroid;
+    }
+
+    // Último recurso: endereço sem número.
+    const query = [street, neighborhood, city, state, 'Brasil'].filter(Boolean).join(', ');
     if (query.replace(/[, ]/g, '').length > 6) {
       return this.geocodeAddress(query);
     }
@@ -61,19 +98,24 @@ export class GeocodingService {
   /** CEP → coords (BrasilAPI → AwesomeAPI → fallback por endereço no Nominatim). */
   async geocodeCep(cep: string): Promise<Coordinates | null> {
     const clean = cep.replace(/\D/g, '');
-
-    const brasil = await this.tryBrasilApi(clean);
-    if (brasil?.coords) return brasil.coords;
-
-    const awesome = await this.tryAwesomeApi(clean);
-    if (awesome?.coords) return awesome.coords;
-
-    const addr = brasil?.address ?? awesome?.address;
-    if (addr) {
-      const query = [addr.street, addr.neighborhood, addr.city, addr.state, 'Brasil'].filter(Boolean).join(', ');
+    const { coords, address } = await this.cepData(clean);
+    if (coords) return coords;
+    if (address) {
+      const query = [address.street, address.neighborhood, address.city, address.state, 'Brasil'].filter(Boolean).join(', ');
       return this.geocodeAddress(query);
     }
     return null;
+  }
+
+  /** Consulta o CEP nos dois provedores e devolve coords (centroide) + endereço. */
+  private async cepData(clean: string): Promise<{ coords: Coordinates | null; address: CepAddress | null }> {
+    const brasil = await this.tryBrasilApi(clean);
+    // Só consulta o segundo provedor se o primeiro não trouxe o que falta.
+    const awesome = (!brasil.coords || !brasil.address) ? await this.tryAwesomeApi(clean) : { coords: null, address: null };
+    return {
+      coords: brasil.coords ?? awesome.coords,
+      address: brasil.address ?? awesome.address,
+    };
   }
 
   private async tryBrasilApi(clean: string): Promise<{ coords: Coordinates | null; address: CepAddress | null }> {
