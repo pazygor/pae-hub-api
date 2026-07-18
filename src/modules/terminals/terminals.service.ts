@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateTerminalDto, UpdateTerminalDto } from './dto/terminal.dto';
+import { CreateTerminalDto, UpdateTerminalDto, UpdateTerminalModulesDto } from './dto/terminal.dto';
+import { normalizeModules, storableSafetySubModules, terminalModulesView } from '../../common/helpers/module-config';
 
 @Injectable()
 export class TerminalsService {
@@ -92,6 +93,24 @@ export class TerminalsService {
     return parts.length ? parts.join(', ') : dto.location;
   }
 
+  /**
+   * Item 7 — configura os pacotes/módulos do terminal. Persiste só os toggles
+   * reais (Conformidade é derivada, nunca armazenada). Sem Safety, os sub-módulos
+   * ficam vazios.
+   */
+  async updateModules(id: string, dto: UpdateTerminalModulesDto) {
+    await this.ensureExists(id);
+    const activeModules = normalizeModules(dto.activeModules);
+    const hasSafety = activeModules.includes('operational_safety');
+    const activeSafetySubModules = hasSafety ? storableSafetySubModules(dto.activeSafetySubModules) : [];
+    const terminal = await this.prisma.terminal.update({
+      where: { id },
+      data: { activeModules, activeSafetySubModules },
+    });
+    this.logger.log(`Terminal ${terminal.code}: módulos atualizados (${activeModules.join(',') || 'nenhum'})`);
+    return this.format(terminal);
+  }
+
   async remove(id: string) {
     await this.ensureExists(id);
     // Soft delete: mantém integridade com ocorrências/usuários vinculados.
@@ -164,6 +183,11 @@ export class TerminalsService {
       lat: t.latitude,
       lng: t.longitude,
       status: t.status,
+      // Pacotes/módulos do terminal (item 7). `safetySubModules` já vem com a
+      // Conformidade derivada; `activeSafetySubModules` são os toggles reais.
+      modules: terminalModulesView(t),
+      activeModules: normalizeModules(t.activeModules),
+      activeSafetySubModules: storableSafetySubModules(t.activeSafetySubModules),
     };
   }
 }

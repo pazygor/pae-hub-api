@@ -438,6 +438,10 @@ model Terminal {
   longitude      Float?
   status         String   @default("Ativo") @db.VarChar(20) // Ativo | Inativo | Revisão
   isActive       Boolean  @default(true)
+  // Pacotes/módulos contratados por terminal (item 7). Conformidade é DERIVADA
+  // (trainings|epis → compliance), por isso não é armazenada em activeSafetySubModules.
+  activeModules          String[] @default(["emergency_management", "operational_safety"])
+  activeSafetySubModules String[] @default(["trainings", "epis"])
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

@@ -10,6 +10,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { LoginDto, ChangePasswordDto } from './dto/auth.dto';
+import { PRODUCT_MODULE } from '../../domain/enums';
+import { terminalModulesView, effectiveSafetySubModules, ProductModule, SafetySubModule } from '../../common/helpers/module-config';
 import { JwtPayload } from './strategies/jwt.strategy';
 
 @Injectable()
@@ -27,7 +29,7 @@ export class AuthService {
       where: { email: dto.email.toLowerCase() },
       include: {
         organization: { select: { id: true, name: true, slug: true } },
-        terminal: { select: { id: true, name: true, code: true } },
+        terminal: { select: { id: true, name: true, code: true, activeModules: true, activeSafetySubModules: true } },
       },
     });
 
@@ -75,9 +77,29 @@ export class AuthService {
         // Entity: terminais visíveis derivam da Permissão (para filtro de notificação no front).
         allowedTerminals: await this.effectiveAllowedTerminals(user),
         allowedOccurrenceTypes: user.allowedOccurrenceTypes,
+        modules: this.modulesForUser(user),
         permissions: this.getPermissionsForRole(user.role, user.accessLevel),
       },
     };
+  }
+
+  /**
+   * Módulos ativos no contexto do usuário (item 7), para o front gatear o menu:
+   * - terminal: a config do próprio terminal;
+   * - admin: tudo (administra todos os terminais);
+   * - entity: só Response (entidades não têm Safety).
+   */
+  private modulesForUser(user: {
+    role: string;
+    terminal?: { activeModules?: string[] | null; activeSafetySubModules?: string[] | null } | null;
+  }): { active: ProductModule[]; safetySubModules: SafetySubModule[] } {
+    if (user.role === 'admin') {
+      return { active: [...PRODUCT_MODULE], safetySubModules: effectiveSafetySubModules(['trainings', 'epis']) };
+    }
+    if (user.role === 'terminal' && user.terminal) {
+      return terminalModulesView(user.terminal);
+    }
+    return { active: ['emergency_management'], safetySubModules: [] };
   }
 
   /** Terminais visíveis do usuário: entity deriva da Permissão da sua entidade;
@@ -164,7 +186,7 @@ export class AuthService {
       where: { id: userId },
       include: {
         organization: { select: { id: true, name: true, slug: true } },
-        terminal: { select: { id: true, name: true, code: true } },
+        terminal: { select: { id: true, name: true, code: true, activeModules: true, activeSafetySubModules: true } },
       },
     });
 
@@ -188,6 +210,7 @@ export class AuthService {
       allowedModules: user.allowedModules,
       allowedTerminals: await this.effectiveAllowedTerminals(user),
       allowedOccurrenceTypes: user.allowedOccurrenceTypes,
+      modules: this.modulesForUser(user),
       permissions: this.getPermissionsForRole(user.role, user.accessLevel),
     };
   }

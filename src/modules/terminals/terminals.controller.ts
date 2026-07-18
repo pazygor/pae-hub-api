@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { TerminalsService } from './terminals.service';
-import { CreateTerminalDto, UpdateTerminalDto } from './dto/terminal.dto';
+import { CreateTerminalDto, UpdateTerminalDto, UpdateTerminalModulesDto } from './dto/terminal.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -38,6 +38,13 @@ export class TerminalsController {
   @ApiOperation({ summary: 'Atualizar terminal' })
   update(@Param('id') id: string, @Body() dto: UpdateTerminalDto) {
     return this.service.update(id, dto);
+  }
+
+  @Put(':id/modules')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Configurar pacotes/módulos do terminal (item 7 — Conformidade derivada)' })
+  updateModules(@Param('id') id: string, @Body() dto: UpdateTerminalModulesDto) {
+    return this.service.updateModules(id, dto);
   }
 
   @Delete(':id')
