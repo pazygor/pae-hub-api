@@ -7,6 +7,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { EPI_TYPE, EPI_USAGE_STATUS } from '../../domain/enums';
+import { assertTerminalsForSafetyWrite } from '../../common/helpers/module-enforcement';
 
 // Fase 5b — EPIs + ciclo de vida das entregas (Funcional §3.11):
 // entregue → em_uso → devolvido | vencido | substituido.
@@ -24,8 +25,9 @@ class CreateEpiDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString()
   expiryDate?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
-  terminalId?: string;
+  @ApiPropertyOptional({ isArray: true, description: 'Terminais a que se aplica; vazio = global (todos)' })
+  @IsOptional() @IsArray() @IsString({ each: true })
+  terminalIds?: string[];
 }
 class UpdateEpiDto extends PartialType(CreateEpiDto) {}
 
@@ -68,7 +70,7 @@ export class EpisService {
       description: e.description ?? '',
       epiType: e.epiType,
       expiryDate: e.expiryDate ?? null,
-      terminalId: e.terminalId ?? undefined,
+      terminalIds: e.terminalIds ?? [],
     };
   }
 
@@ -103,10 +105,12 @@ export class EpisService {
   }
 
   async create(dto: CreateEpiDto, user: any) {
+    // Registro compartilhado: valida acesso + módulo de cada terminal (vazio = global admin-only).
+    await assertTerminalsForSafetyWrite(this.prisma, user, dto.terminalIds, 'epis');
     const epi = await this.prisma.epi.create({
       data: {
         organizationId: user.organizationId,
-        terminalId: dto.terminalId || null,
+        terminalIds: dto.terminalIds ?? [],
         name: dto.name,
         description: dto.description ?? '',
         epiType: dto.epiType,

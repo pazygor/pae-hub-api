@@ -280,7 +280,8 @@ model PAEDocument {
 model Training {
   id               String   @id @default(uuid())
   organizationId   String
-  terminalId       String?
+  // Terminais a que o treinamento se aplica (registro compartilhado). Vazio = global (todos).
+  terminalIds      String[] @default([])
   name             String   @db.VarChar(255)
   description      String   @db.Text
   mandatory        Boolean  @default(false)
@@ -317,7 +318,8 @@ model UserTraining {
 model Epi {
   id             String    @id @default(uuid())
   organizationId String
-  terminalId     String?
+  // Terminais a que o EPI se aplica (registro compartilhado). Vazio = global (todos).
+  terminalIds    String[]  @default([])
   name           String    @db.VarChar(255)
   description    String    @db.Text
   epiType        String    @db.VarChar(30) // EPI_TYPE (proteção_cabeça | ... | outro)
@@ -356,7 +358,8 @@ model UserEpi {
 model ComplianceItem {
   id               String    @id @default(uuid())
   organizationId   String
-  terminalId       String?
+  // Terminais a que o item se aplica (registro compartilhado). Vazio = global (todos/nenhum específico).
+  terminalIds      String[]  @default([])
   name             String    @db.VarChar(255)
   responsible      String    @db.VarChar(255)
   status           String    @default("conforme") @db.VarChar(20) // conforme | atencao | nao_conforme

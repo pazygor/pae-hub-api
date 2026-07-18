@@ -371,10 +371,10 @@ async function main() {
 
   // ─── Fase 5b — Segurança Operacional (idempotente por nome) ─────────────────
   const trainingSpecs = [
-    { terminalId: t.t1, name: 'Combate a Incêndio', description: 'Treinamento básico de combate a incêndios em área portuária', mandatory: true, materialFileName: 'manual-combate-incendio.pdf', videoUrl: 'https://www.youtube.com/watch?v=example1' },
-    { terminalId: t.t1, name: 'Primeiros Socorros', description: 'Atendimento de emergência e primeiros socorros', mandatory: true, videoUrl: 'https://www.youtube.com/watch?v=example2' },
-    { terminalId: t.t2, name: 'Manuseio de Produtos Químicos', description: 'Procedimentos para manuseio seguro de produtos químicos', mandatory: false, materialFileName: 'guia-produtos-quimicos.pptx' },
-    { terminalId: t.t1, name: 'Evacuação de Emergência', description: 'Procedimentos de evacuação e uso de rotas de fuga', mandatory: true },
+    { terminalIds: [t.t1], name: 'Combate a Incêndio', description: 'Treinamento básico de combate a incêndios em área portuária', mandatory: true, materialFileName: 'manual-combate-incendio.pdf', videoUrl: 'https://www.youtube.com/watch?v=example1' },
+    { terminalIds: [t.t1], name: 'Primeiros Socorros', description: 'Atendimento de emergência e primeiros socorros', mandatory: true, videoUrl: 'https://www.youtube.com/watch?v=example2' },
+    { terminalIds: [t.t2], name: 'Manuseio de Produtos Químicos', description: 'Procedimentos para manuseio seguro de produtos químicos', mandatory: false, materialFileName: 'guia-produtos-quimicos.pptx' },
+    { terminalIds: [t.t1], name: 'Evacuação de Emergência', description: 'Procedimentos de evacuação e uso de rotas de fuga', mandatory: true },
   ];
   const trn: Record<string, { id: string }> = {};
   for (const spec of trainingSpecs) {
@@ -393,11 +393,11 @@ async function main() {
   }
 
   const epiSpecs = [
-    { terminalId: t.t1, name: 'Capacete de Segurança', description: 'Capacete com aba frontal para proteção contra impactos', epiType: 'proteção_cabeça' },
-    { terminalId: t.t1, name: 'Luvas Nitrílicas', description: 'Luvas de proteção química em nitrila', epiType: 'proteção_mãos', expiryDate: new Date('2026-09-15') },
-    { terminalId: t.t2, name: 'Respirador PFF2', description: 'Máscara de proteção respiratória PFF2', epiType: 'proteção_respiratória', expiryDate: new Date('2026-05-01') },
-    { terminalId: t.t1, name: 'Óculos de Proteção', description: 'Óculos ampla visão contra respingos', epiType: 'proteção_ocular' },
-    { terminalId: t.t2, name: 'Roupa de Proteção Química', description: 'Macacão de proteção contra agentes químicos', epiType: 'proteção_corpo', expiryDate: new Date('2026-12-01') },
+    { terminalIds: [t.t1], name: 'Capacete de Segurança', description: 'Capacete com aba frontal para proteção contra impactos', epiType: 'proteção_cabeça' },
+    { terminalIds: [t.t1], name: 'Luvas Nitrílicas', description: 'Luvas de proteção química em nitrila', epiType: 'proteção_mãos', expiryDate: new Date('2026-09-15') },
+    { terminalIds: [t.t2], name: 'Respirador PFF2', description: 'Máscara de proteção respiratória PFF2', epiType: 'proteção_respiratória', expiryDate: new Date('2026-05-01') },
+    { terminalIds: [t.t1], name: 'Óculos de Proteção', description: 'Óculos ampla visão contra respingos', epiType: 'proteção_ocular' },
+    { terminalIds: [t.t2], name: 'Roupa de Proteção Química', description: 'Macacão de proteção contra agentes químicos', epiType: 'proteção_corpo', expiryDate: new Date('2026-12-01') },
   ];
   const epiRec: Record<string, { id: string }> = {};
   for (const spec of epiSpecs) {
@@ -416,9 +416,9 @@ async function main() {
   }
 
   const complianceSpecs = [
-    { terminalId: t.t1, name: 'Inspeção de extintores', responsible: 'Coordenador SST', status: 'conforme', expiryDate: new Date('2026-08-01'), notes: 'Última inspeção realizada em Jan/2026', area: 'Pátio de contêineres', verificationDate: new Date('2026-01-15') },
-    { terminalId: t.t2, name: 'Licença ambiental', responsible: 'Gerência Ambiental', status: 'atencao', expiryDate: new Date('2026-05-15'), notes: 'Renovação em andamento', area: 'Administração', verificationDate: new Date('2026-03-01') },
-    { terminalId: t.t1, name: 'Certificação NR-29', responsible: 'Supervisor Portuário', status: 'nao_conforme', expiryDate: new Date('2026-01-10'), userId: carlosUser.id, notes: 'Aguardando agendamento', area: 'Berço 101' },
+    { terminalIds: [t.t1], name: 'Inspeção de extintores', responsible: 'Coordenador SST', status: 'conforme', expiryDate: new Date('2026-08-01'), notes: 'Última inspeção realizada em Jan/2026', area: 'Pátio de contêineres', verificationDate: new Date('2026-01-15') },
+    { terminalIds: [t.t2], name: 'Licença ambiental', responsible: 'Gerência Ambiental', status: 'atencao', expiryDate: new Date('2026-05-15'), notes: 'Renovação em andamento', area: 'Administração', verificationDate: new Date('2026-03-01') },
+    { terminalIds: [t.t1], name: 'Certificação NR-29', responsible: 'Supervisor Portuário', status: 'nao_conforme', expiryDate: new Date('2026-01-10'), userId: carlosUser.id, notes: 'Aguardando agendamento', area: 'Berço 101' },
   ];
   for (const spec of complianceSpecs) {
     const existing = await prisma.complianceItem.findFirst({ where: { organizationId: org.id, name: spec.name } });

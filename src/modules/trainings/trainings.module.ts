@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { assertTerminalsForSafetyWrite } from '../../common/helpers/module-enforcement';
 
 // Fase 5b — Treinamentos + atribuições por usuário (Funcional §3.10).
 
@@ -25,8 +26,9 @@ class CreateTrainingDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500)
   videoUrl?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
-  terminalId?: string;
+  @ApiPropertyOptional({ isArray: true, description: 'Terminais a que se aplica; vazio = global (todos)' })
+  @IsOptional() @IsArray() @IsString({ each: true })
+  terminalIds?: string[];
 }
 class UpdateTrainingDto extends PartialType(CreateTrainingDto) {}
 
@@ -56,7 +58,7 @@ export class TrainingsService {
       mandatory: t.mandatory,
       materialFileName: t.materialFileName ?? undefined,
       videoUrl: t.videoUrl ?? undefined,
-      terminalId: t.terminalId ?? undefined,
+      terminalIds: t.terminalIds ?? [],
     };
   }
 
@@ -88,10 +90,12 @@ export class TrainingsService {
   }
 
   async create(dto: CreateTrainingDto, user: any) {
+    // Registro compartilhado: valida acesso + módulo de cada terminal (vazio = global admin-only).
+    await assertTerminalsForSafetyWrite(this.prisma, user, dto.terminalIds, 'trainings');
     const training = await this.prisma.training.create({
       data: {
         organizationId: user.organizationId,
-        terminalId: dto.terminalId || null,
+        terminalIds: dto.terminalIds ?? [],
         name: dto.name,
         description: dto.description ?? '',
         mandatory: dto.mandatory ?? false,

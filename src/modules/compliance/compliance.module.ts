@@ -1,12 +1,13 @@
 import { Module, Injectable, NotFoundException, ForbiddenException, Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsIn, IsDateString, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsIn, IsDateString, MaxLength, IsArray } from 'class-validator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { COMPLIANCE_STATUS } from '../../domain/enums';
+import { assertTerminalsForSafetyWrite } from '../../common/helpers/module-enforcement';
 
 // Fase 5b — Itens de conformidade regulatória (Funcional §3.12):
 // conforme | atencao | nao_conforme; não-conformidades alimentam os Pendency Alerts.
@@ -30,8 +31,9 @@ class CreateComplianceDto {
   @ApiPropertyOptional() @IsOptional() @IsString()
   notes?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
-  terminalId?: string;
+  @ApiPropertyOptional({ isArray: true, description: 'Terminais a que se aplica; vazio = global (nenhum específico)' })
+  @IsOptional() @IsArray() @IsString({ each: true })
+  terminalIds?: string[];
 
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100)
   area?: string;
@@ -54,7 +56,7 @@ export class ComplianceService {
       expiryDate: i.expiryDate ?? null,
       userId: i.userId ?? null,
       notes: i.notes ?? '',
-      terminalId: i.terminalId ?? null,
+      terminalIds: i.terminalIds ?? [],
       area: i.area ?? '',
       verificationDate: i.verificationDate ?? null,
     };
@@ -69,10 +71,12 @@ export class ComplianceService {
   }
 
   async create(dto: CreateComplianceDto, user: any) {
+    // Registro compartilhado: valida acesso + módulo de cada terminal (vazio = global admin-only).
+    await assertTerminalsForSafetyWrite(this.prisma, user, dto.terminalIds, 'compliance');
     const item = await this.prisma.complianceItem.create({
       data: {
         organizationId: user.organizationId,
-        terminalId: dto.terminalId || null,
+        terminalIds: dto.terminalIds ?? [],
         name: dto.name,
         responsible: dto.responsible,
         status: dto.status ?? 'conforme',
@@ -88,6 +92,10 @@ export class ComplianceService {
 
   async update(id: string, dto: UpdateComplianceDto, user: any) {
     await this.findOwned(id, user);
+    // Se mudar os terminais, revalida acesso + módulo (vazio = global admin-only).
+    if (dto.terminalIds !== undefined) {
+      await assertTerminalsForSafetyWrite(this.prisma, user, dto.terminalIds, 'compliance');
+    }
     const { expiryDate, verificationDate, ...fields } = dto;
     const data: any = { ...fields };
     if (expiryDate !== undefined) data.expiryDate = expiryDate ? new Date(expiryDate) : null;
