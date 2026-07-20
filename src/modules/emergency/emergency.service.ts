@@ -176,7 +176,7 @@ export class EmergencyService {
     });
 
     await this.audit.record({
-      userId: user.id, action: 'create', resource: 'occurrence', resourceId: occurrence.id,
+      userId: user.id, action: 'create', resource: 'occurrence', resourceId: occurrence.id, terminalId: occurrence.terminalId,
       details: { incNumber: occurrence.incNumber, type: occurrence.type, criticality: occurrence.criticality },
     });
 
@@ -239,7 +239,7 @@ export class EmergencyService {
     if (applicable.length > 0) {
       this.logger.log(`Occurrence ${occurrence.id}: ${applicable.length} entidade(s) acionada(s) automaticamente`);
       await this.audit.record({
-        userId: user.id, action: 'dispatch', resource: 'occurrence', resourceId: occurrence.id,
+        userId: user.id, action: 'dispatch', resource: 'occurrence', resourceId: occurrence.id, terminalId: occurrence.terminalId,
         details: {
           incNumber: occurrence.incNumber,
           entidades: applicable.map((r) => r.entity.name),
@@ -266,7 +266,7 @@ export class EmergencyService {
     });
 
     await this.audit.record({
-      userId: user.id, action: 'update', resource: 'occurrence', resourceId: id,
+      userId: user.id, action: 'update', resource: 'occurrence', resourceId: id, terminalId: occurrence.terminalId,
       details: { incNumber: occurrence.incNumber, campos: Object.keys(fields) },
     });
 
@@ -306,7 +306,7 @@ export class EmergencyService {
     });
 
     await this.audit.record({
-      userId: user.id, action: 'status_change', resource: 'occurrence', resourceId: id,
+      userId: user.id, action: 'status_change', resource: 'occurrence', resourceId: id, terminalId: occurrence.terminalId,
       details: { incNumber: occurrence.incNumber, de: occurrence.status, para: dto.status },
     });
 
@@ -390,7 +390,7 @@ export class EmergencyService {
     });
 
     await this.audit.record({
-      userId: user.id, action: 'timeline_add', resource: 'occurrence', resourceId: id,
+      userId: user.id, action: 'timeline_add', resource: 'occurrence', resourceId: id, terminalId: occurrence.terminalId,
       details: { incNumber: occurrence.incNumber, tipo: dto.type },
     });
 
@@ -499,7 +499,7 @@ export class EmergencyService {
     await this.prisma.occurrence.update({ where: { id }, data: { isActive: false } });
 
     await this.audit.record({
-      userId: user.id, action: 'delete', resource: 'occurrence', resourceId: id,
+      userId: user.id, action: 'delete', resource: 'occurrence', resourceId: id, terminalId: occurrence.terminalId,
       details: { incNumber: occurrence.incNumber, type: occurrence.type },
     });
 

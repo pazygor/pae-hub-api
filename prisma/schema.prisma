@@ -798,6 +798,7 @@ model AuditLog {
   action     String   @db.VarChar(100)
   resource   String   @db.VarChar(100)
   resourceId String?  @db.VarChar(100)
+  terminalId String?  @db.VarChar(100) // terminal do recurso (ex.: ocorrência) — filtro/coluna da auditoria; sem FK (log independente)
   details    Json?
   ipAddress  String?  @db.VarChar(50)
   userAgent  String?  @db.VarChar(500)
@@ -807,6 +808,7 @@ model AuditLog {
 
   @@index([userId])
   @@index([resource])
+  @@index([terminalId])
   @@index([createdAt])
   @@map("audit_logs")
 }

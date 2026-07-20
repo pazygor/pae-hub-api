@@ -10,6 +10,7 @@ export interface RecordInput {
   action: string;
   resource: string;
   resourceId?: string | null;
+  terminalId?: string | null; // terminal do recurso (ex.: ocorrência)
   details?: unknown;
   ip?: string;
   userAgent?: string;
@@ -17,6 +18,7 @@ export interface RecordInput {
 
 interface AccessQuery {
   userId?: string;
+  terminalId?: string;
   from?: string;
   to?: string;
   status?: 'ativa' | 'encerrada' | 'expirada';
@@ -25,6 +27,7 @@ interface AccessQuery {
 
 interface ActivityQuery {
   userId?: string;
+  terminalId?: string;
   resource?: string;
   action?: string;
   resourceId?: string;
@@ -46,6 +49,19 @@ export class AuditService {
    * o front já deduplica a maioria dos casos antes de enviar.
    */
   async recordView(input: RecordInput): Promise<void> {
+    // Terminal do recurso: a abertura só traz o resourceId (id da ocorrência),
+    // então resolvemos o terminal aqui para preencher a coluna/filtro.
+    let terminalId = input.terminalId ?? null;
+    if (!terminalId && input.resource === 'occurrence' && input.resourceId) {
+      try {
+        const occ = await this.prisma.occurrence.findUnique({
+          where: { id: input.resourceId },
+          select: { terminalId: true },
+        });
+        terminalId = occ?.terminalId ?? null;
+      } catch { /* segue sem terminal */ }
+    }
+
     try {
       const since = new Date(Date.now() - 30_000);
       const dup = await this.prisma.auditLog.findFirst({
@@ -62,7 +78,7 @@ export class AuditService {
     } catch (err: any) {
       this.logger.warn(`Falha no dedupe de view: ${err?.message ?? err}`);
     }
-    await this.record(input);
+    await this.record({ ...input, terminalId });
   }
 
   // ── Item 2: gravar trilha de atividade (não pode derrubar a operação de origem) ──
@@ -74,6 +90,7 @@ export class AuditService {
           action: input.action,
           resource: input.resource,
           resourceId: input.resourceId ?? null,
+          terminalId: input.terminalId ?? null,
           details: (input.details ?? undefined) as any,
           ipAddress: input.ip ?? null,
           userAgent: input.userAgent ?? null,
@@ -88,6 +105,8 @@ export class AuditService {
   async listAccess(q: AccessQuery) {
     const where: any = {};
     if (q.userId) where.userId = q.userId;
+    // Terminal do acesso = terminal do usuário (via relação).
+    if (q.terminalId) where.user = { terminalId: q.terminalId };
     const loginAt: any = {};
     if (q.from) loginAt.gte = new Date(q.from);
     if (q.to) loginAt.lte = new Date(q.to);
@@ -104,17 +123,18 @@ export class AuditService {
       where,
       orderBy: { loginAt: 'desc' },
       take: Math.min(Number(q.limit) || 200, 500),
-      include: { user: { select: { id: true, name: true, email: true } } },
+      include: { user: { select: { id: true, name: true, email: true, terminalId: true } } },
     });
     return { data: rows.map((r) => this.formatSession(r)), meta: { total: rows.length } };
   }
 
-  async accessStats(q: { from?: string; to?: string }) {
+  async accessStats(q: { from?: string; to?: string; terminalId?: string }) {
     const to = q.to ? new Date(q.to) : new Date();
     const from = q.from ? new Date(q.from) : new Date(to.getTime() - 30 * DAY_MS);
+    const terminalWhere = q.terminalId ? { user: { terminalId: q.terminalId } } : {};
 
     const sessions = await this.prisma.accessSession.findMany({
-      where: { loginAt: { gte: from, lte: to } },
+      where: { loginAt: { gte: from, lte: to }, ...terminalWhere },
       select: { userId: true, loginAt: true, logoutAt: true },
     });
 
@@ -131,7 +151,7 @@ export class AuditService {
       : 0;
 
     const activeNow = await this.prisma.accessSession.count({
-      where: { logoutAt: null, loginAt: { gte: new Date(Date.now() - REFRESH_TTL_MS) } },
+      where: { logoutAt: null, loginAt: { gte: new Date(Date.now() - REFRESH_TTL_MS) }, ...terminalWhere },
     });
 
     const byDay = new Map<string, number>();
@@ -160,6 +180,7 @@ export class AuditService {
       userId: s.userId,
       userName: s.user?.name ?? '—',
       userEmail: s.user?.email ?? null,
+      terminalId: s.user?.terminalId ?? null,
       loginAt: s.loginAt,
       logoutAt: s.logoutAt,
       status,
@@ -173,6 +194,7 @@ export class AuditService {
   async listActivity(q: ActivityQuery) {
     const where: any = {};
     if (q.userId) where.userId = q.userId;
+    if (q.terminalId) where.terminalId = q.terminalId;
     if (q.resource) where.resource = q.resource;
     if (q.action) where.action = q.action;
     if (q.resourceId) where.resourceId = q.resourceId;
@@ -195,6 +217,7 @@ export class AuditService {
         action: r.action,
         resource: r.resource,
         resourceId: r.resourceId,
+        terminalId: r.terminalId,
         details: r.details,
         ipAddress: r.ipAddress,
         createdAt: r.createdAt,
@@ -203,12 +226,12 @@ export class AuditService {
     };
   }
 
-  async activityStats(q: { from?: string; to?: string }) {
+  async activityStats(q: { from?: string; to?: string; terminalId?: string }) {
     const to = q.to ? new Date(q.to) : new Date();
     const from = q.from ? new Date(q.from) : new Date(to.getTime() - 30 * DAY_MS);
 
     const rows = await this.prisma.auditLog.findMany({
-      where: { createdAt: { gte: from, lte: to } },
+      where: { createdAt: { gte: from, lte: to }, ...(q.terminalId ? { terminalId: q.terminalId } : {}) },
       select: { userId: true, action: true, createdAt: true },
     });
 

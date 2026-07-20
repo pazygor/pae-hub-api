@@ -26,19 +26,20 @@ export class AuditController {
   @ApiOperation({ summary: 'Sessões de acesso (item 1) — login/logout/duração' })
   access(
     @Query('userId') userId?: string,
+    @Query('terminalId') terminalId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('status') status?: 'ativa' | 'encerrada' | 'expirada',
     @Query('limit') limit?: string,
   ) {
-    return this.service.listAccess({ userId, from, to, status, limit });
+    return this.service.listAccess({ userId, terminalId, from, to, status, limit });
   }
 
   @Get('access/stats')
   @Roles('admin')
   @ApiOperation({ summary: 'KPIs de acesso (item 1)' })
-  accessStats(@Query('from') from?: string, @Query('to') to?: string) {
-    return this.service.accessStats({ from, to });
+  accessStats(@Query('from') from?: string, @Query('to') to?: string, @Query('terminalId') terminalId?: string) {
+    return this.service.accessStats({ from, to, terminalId });
   }
 
   @Get('activity')
@@ -46,6 +47,7 @@ export class AuditController {
   @ApiOperation({ summary: 'Trilha de atividade (item 2) — ações sobre recursos' })
   activity(
     @Query('userId') userId?: string,
+    @Query('terminalId') terminalId?: string,
     @Query('resource') resource?: string,
     @Query('action') action?: string,
     @Query('resourceId') resourceId?: string,
@@ -53,14 +55,14 @@ export class AuditController {
     @Query('to') to?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.service.listActivity({ userId, resource, action, resourceId, from, to, limit });
+    return this.service.listActivity({ userId, terminalId, resource, action, resourceId, from, to, limit });
   }
 
   @Get('activity/stats')
   @Roles('admin')
   @ApiOperation({ summary: 'KPIs de atividade (item 2)' })
-  activityStats(@Query('from') from?: string, @Query('to') to?: string) {
-    return this.service.activityStats({ from, to });
+  activityStats(@Query('from') from?: string, @Query('to') to?: string, @Query('terminalId') terminalId?: string) {
+    return this.service.activityStats({ from, to, terminalId });
   }
 
   // ── Registro de abertura-chave (qualquer autenticado; ex.: Sala de Situação) ──
