@@ -24,7 +24,7 @@ export class AuthService {
     private configService: ConfigService,
   ) {}
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, meta?: { ip?: string; userAgent?: string }) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
       include: {
@@ -51,6 +51,11 @@ export class AuthService {
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });
+
+    // Auditoria de acesso (item 1): abre a sessão. Falha aqui não derruba o login.
+    await this.prisma.accessSession
+      .create({ data: { userId: user.id, ipAddress: meta?.ip, userAgent: meta?.userAgent } })
+      .catch((err) => this.logger.warn(`Falha ao registrar AccessSession: ${err?.message ?? err}`));
 
     const tokens = await this.generateTokens(user);
 
@@ -147,15 +152,44 @@ export class AuthService {
         where: { userId, token: refreshToken },
         data: { revokedAt: new Date() },
       });
+      // Auditoria (item 1): saída de UMA sessão → fecha a aberta mais recente.
+      await this.closeOpenSessions(userId, false);
     } else {
       // Revoke all refresh tokens for user
       await this.prisma.refreshToken.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
+      // Auditoria (item 1): "logout all" → fecha todas as sessões abertas.
+      await this.closeOpenSessions(userId, true);
     }
     this.logger.log(`User ${userId} logged out`);
     return { message: 'Logout realizado com sucesso' };
+  }
+
+  /** Fecha sessão(ões) de acesso aberta(s) do usuário (endReason 'logout'). */
+  private async closeOpenSessions(userId: string, all: boolean) {
+    try {
+      if (all) {
+        await this.prisma.accessSession.updateMany({
+          where: { userId, logoutAt: null },
+          data: { logoutAt: new Date(), endReason: 'logout' },
+        });
+        return;
+      }
+      const open = await this.prisma.accessSession.findFirst({
+        where: { userId, logoutAt: null },
+        orderBy: { loginAt: 'desc' },
+      });
+      if (open) {
+        await this.prisma.accessSession.update({
+          where: { id: open.id },
+          data: { logoutAt: new Date(), endReason: 'logout' },
+        });
+      }
+    } catch (err: any) {
+      this.logger.warn(`Falha ao fechar AccessSession: ${err?.message ?? err}`);
+    }
   }
 
   async changePassword(userId: string, dto: ChangePasswordDto) {

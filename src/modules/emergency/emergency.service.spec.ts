@@ -3,6 +3,7 @@ import { NotFoundException, ForbiddenException, BadRequestException } from '@nes
 import { EmergencyService } from './emergency.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway, CopEventType } from '../realtime/realtime.gateway';
+import { AuditService } from '../audit/audit.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EmergencyService — coração do PAE (fluxo-de-funcionamento §6.2/§6.3/§6.5):
@@ -35,6 +36,9 @@ const mockRealtime = {
   emitToWarRoom: jest.fn(),
 };
 
+// Auditoria (item 2): record é fire-and-forget; no teste basta resolver.
+const mockAudit = { record: jest.fn().mockResolvedValue(undefined) };
+
 const adminUser = {
   id: 'admin-1', role: 'admin', name: 'Admin', email: 'admin@paehub.com',
   organizationId: 'org-1', allowedOccurrenceTypes: [],
@@ -64,6 +68,7 @@ describe('EmergencyService', () => {
         EmergencyService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: RealtimeGateway, useValue: mockRealtime },
+        { provide: AuditService, useValue: mockAudit },
       ],
     }).compile();
 
