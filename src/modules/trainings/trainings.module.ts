@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { assertTerminalsForSafetyWrite } from '../../common/helpers/module-enforcement';
+import { assertTerminalsForSafetyWrite, assertSafetyRecordEditable } from '../../common/helpers/module-enforcement';
 
 // Fase 5b — Treinamentos + atribuições por usuário (Funcional §3.10).
 
@@ -106,6 +106,27 @@ export class TrainingsService {
     return this.format(training);
   }
 
+  async update(id: string, dto: UpdateTrainingDto, user: any) {
+    const current = await this.findOwned(id, user);
+    // Registro órfão (todos os terminais perderam o módulo) é só-leitura.
+    await assertSafetyRecordEditable(this.prisma, current.terminalIds, 'trainings');
+    if (dto.terminalIds !== undefined) {
+      const before: string[] = current.terminalIds ?? [];
+      const added = dto.terminalIds.filter((t) => !before.includes(t));
+      if (dto.terminalIds.length === 0) {
+        // Virou global (todos os terminais): exclusivo do admin.
+        await assertTerminalsForSafetyWrite(this.prisma, user, [], 'trainings');
+      } else if (added.length > 0) {
+        // Só os terminais ADICIONADOS precisam ter o módulo; manter um vínculo
+        // preexistente não pode travar a edição.
+        await assertTerminalsForSafetyWrite(this.prisma, user, added, 'trainings');
+      }
+    }
+
+    const updated = await this.prisma.training.update({ where: { id }, data: { ...dto } });
+    return this.format(updated);
+  }
+
   async remove(id: string, user: any) {
     await this.findOwned(id, user);
     // Assignments caem em cascata (onDelete: Cascade)
@@ -191,6 +212,13 @@ export class TrainingsController {
   @Roles('admin', 'terminal')
   removeAssignment(@Param('assignmentId') assignmentId: string, @CurrentUser() user: any) {
     return this.service.removeAssignment(assignmentId, user);
+  }
+
+  // Declarado depois de 'assignments/:assignmentId' para a rota específica casar primeiro.
+  @Put(':id')
+  @Roles('admin', 'terminal')
+  update(@Param('id') id: string, @Body() dto: UpdateTrainingDto, @CurrentUser() user: any) {
+    return this.service.update(id, dto, user);
   }
 
   @Delete(':id')
