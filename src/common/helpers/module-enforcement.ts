@@ -31,6 +31,33 @@ export async function assertTerminalSafetySubModule(
 }
 
 /**
+ * Um registro de Safety fica **órfão** quando NENHUM dos seus terminais tem mais o
+ * sub-módulo habilitado. Aí ele vira só-leitura: para voltar a editar, é preciso
+ * reativar o módulo do terminal (Pacotes do Sistema).
+ *
+ * Lista vazia = global (vale para todos) → nunca é órfão. Basta **um** terminal
+ * com o módulo para o registro continuar editável — senão um terminal desativado
+ * travaria a edição de um registro compartilhado que ainda serve aos outros.
+ */
+export async function assertSafetyRecordEditable(
+  prisma: PrismaService,
+  terminalIds: string[] | null | undefined,
+  sub: SafetySubModule,
+): Promise<void> {
+  const ids = Array.isArray(terminalIds) ? terminalIds.filter(Boolean) : [];
+  if (ids.length === 0) return; // global
+  const terminals = await prisma.terminal.findMany({
+    where: { id: { in: ids } },
+    select: { activeModules: true, activeSafetySubModules: true },
+  });
+  if (!terminals.some((t) => terminalHasSafetySubModule(t, sub))) {
+    throw new ForbiddenException(
+      `Nenhum terminal deste registro tem o módulo "${LABEL[sub]}" habilitado; reative o módulo para editar`,
+    );
+  }
+}
+
+/**
  * Valida a LISTA de terminais de um registro de Safety (registro compartilhado):
  * - lista vazia = **global** (org-wide) → exclusivo do admin;
  * - não-admin: todos os terminais precisam estar no seu acesso;

@@ -7,7 +7,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { EPI_TYPE, EPI_USAGE_STATUS } from '../../domain/enums';
-import { assertTerminalsForSafetyWrite } from '../../common/helpers/module-enforcement';
+import { assertTerminalsForSafetyWrite, assertSafetyRecordEditable } from '../../common/helpers/module-enforcement';
 
 // Fase 5b — EPIs + ciclo de vida das entregas (Funcional §3.11):
 // entregue → em_uso → devolvido | vencido | substituido.
@@ -118,6 +118,30 @@ export class EpisService {
       },
     });
     return this.format(epi);
+  }
+
+  async update(id: string, dto: UpdateEpiDto, user: any) {
+    const current = await this.findOwned(id, user);
+    // Registro órfão (todos os terminais perderam o módulo) é só-leitura.
+    await assertSafetyRecordEditable(this.prisma, current.terminalIds, 'epis');
+    if (dto.terminalIds !== undefined) {
+      const before: string[] = current.terminalIds ?? [];
+      const added = dto.terminalIds.filter((t) => !before.includes(t));
+      if (dto.terminalIds.length === 0) {
+        // Virou global (todos os terminais): exclusivo do admin.
+        await assertTerminalsForSafetyWrite(this.prisma, user, [], 'epis');
+      } else if (added.length > 0) {
+        // Só os terminais ADICIONADOS precisam ter o módulo. Manter um vínculo que
+        // já existia não pode travar a edição se o módulo foi desligado depois.
+        await assertTerminalsForSafetyWrite(this.prisma, user, added, 'epis');
+      }
+    }
+    const { expiryDate, ...fields } = dto;
+    const data: any = { ...fields };
+    if (expiryDate !== undefined) data.expiryDate = expiryDate ? new Date(expiryDate) : null;
+
+    const updated = await this.prisma.epi.update({ where: { id }, data });
+    return this.format(updated);
   }
 
   async remove(id: string, user: any) {
@@ -236,6 +260,13 @@ export class EpisController {
   @Roles('admin', 'terminal')
   removeDelivery(@Param('deliveryId') deliveryId: string, @CurrentUser() user: any) {
     return this.service.removeDelivery(deliveryId, user);
+  }
+
+  // Declarado depois de 'deliveries/:deliveryId' para a rota específica casar primeiro.
+  @Put(':id')
+  @Roles('admin', 'terminal')
+  update(@Param('id') id: string, @Body() dto: UpdateEpiDto, @CurrentUser() user: any) {
+    return this.service.update(id, dto, user);
   }
 
   @Delete(':id')
