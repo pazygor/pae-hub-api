@@ -8,9 +8,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { tenantScope, resolveTerminalId, userCanAccessTerminal } from '../../common/helpers/tenant-scope';
 import { DOCUMENT_TYPE } from '../../domain/enums';
+import { FilesModule, FilesService } from '../files/files.module';
 
 // Fase 5a — Biblioteca de documentos PAE (DER §6.1 / Funcional §3.8).
-// Só metadados nesta fase; upload do arquivo real chega na Fase 6.
+// Arquivo real via FileAsset (item 4); `fileName` é o rótulo de exibição.
 
 class CreateDocumentDto {
   @ApiProperty() @IsString() @IsNotEmpty() @MaxLength(255)
@@ -25,6 +26,10 @@ class CreateDocumentDto {
   @ApiProperty() @IsString() @IsNotEmpty() @MaxLength(255)
   fileName!: string;
 
+  @ApiPropertyOptional({ description: 'FileAsset do arquivo real (item 4)' })
+  @IsOptional() @IsString()
+  fileId?: string;
+
   @ApiPropertyOptional({ description: 'Obrigatório para admin' }) @IsOptional() @IsString()
   terminalId?: string;
 }
@@ -32,9 +37,9 @@ class UpdateDocumentDto extends PartialType(CreateDocumentDto) {}
 
 @Injectable()
 export class PaeDocumentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private files: FilesService) {}
 
-  private format(d: any) {
+  private async format(d: any) {
     return {
       id: d.id,
       terminalId: d.terminalId,
@@ -43,6 +48,9 @@ export class PaeDocumentsService {
       docType: d.docType,
       description: d.description ?? '',
       fileName: d.fileName,
+      fileId: d.fileId ?? undefined,
+      // URL assinada do arquivo (item 4). Só quando há arquivo real.
+      fileUrl: d.fileId ? await this.files.readUrl(d.fileId) : undefined,
       uploadDate: d.createdAt,
       userName: d.uploadedBy ?? '—',
     };
@@ -55,7 +63,7 @@ export class PaeDocumentsService {
       orderBy: { createdAt: 'desc' },
       include: { terminal: { select: { name: true } } },
     });
-    return docs.map((d) => this.format(d));
+    return Promise.all(docs.map((d) => this.format(d)));
   }
 
   async create(dto: CreateDocumentDto, user: any) {
@@ -69,6 +77,7 @@ export class PaeDocumentsService {
         docType: dto.docType,
         description: dto.description,
         fileName: dto.fileName,
+        fileId: dto.fileId,
         uploadedBy: user.name,
       },
       include: { terminal: { select: { name: true } } },
@@ -134,6 +143,7 @@ export class PaeDocumentsController {
 }
 
 @Module({
+  imports: [FilesModule],
   providers: [PaeDocumentsService],
   controllers: [PaeDocumentsController],
 })

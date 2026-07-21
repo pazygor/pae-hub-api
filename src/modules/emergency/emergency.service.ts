@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway, CopEventType } from '../realtime/realtime.gateway';
+import { FilesService } from '../files/files.module';
 import { tenantScope, userCanAccessTerminal, entityPermittedTerminals } from '../../common/helpers/tenant-scope';
 import {
   CreateOccurrenceDto,
@@ -25,6 +26,7 @@ export class EmergencyService {
   constructor(
     private prisma: PrismaService,
     private realtime: RealtimeGateway,
+    private files: FilesService, // item 10: URL assinada dos anexos do chat
   ) {}
 
   async findAll(query: OccurrenceQueryDto, user: any) {
@@ -367,7 +369,7 @@ export class EmergencyService {
     return this.formatTimelineEvent(event);
   }
 
-  // ── Chat da ocorrência (ChatMessage — DER §6.1, Fase 3) ────────────────────
+  // ── Chat da ocorrência (ChatMessage — DER §6.1, Fase 3; anexos = item 10) ───
 
   async getChatMessages(id: string, user: any) {
     const occurrence = await this.findOneRaw(id);
@@ -379,15 +381,42 @@ export class EmergencyService {
       include: { user: { select: { name: true, role: true } } },
     });
 
-    return messages.map((m) => this.formatChatMessage(m));
+    // Item 10: carrega os FileAsset dos anexos em lote (evita N+1) e injeta a URL assinada.
+    const assetIds = [...new Set(messages.map((m) => m.fileAssetId).filter((x): x is string => !!x))];
+    const assets = assetIds.length
+      ? await this.prisma.fileAsset.findMany({ where: { id: { in: assetIds } } })
+      : [];
+    const byId = new Map(assets.map((a) => [a.id, a]));
+
+    return Promise.all(
+      messages.map((m) => this.formatChatMessage(m, m.fileAssetId ? byId.get(m.fileAssetId) : null)),
+    );
   }
 
   async addChatMessage(id: string, dto: CreateChatMessageDto, user: any) {
     const occurrence = await this.findOneRaw(id);
     await this.checkTenantAccess(occurrence, user);
 
+    const text = dto.message?.trim() || null;
+
+    // Item 10: valida o anexo (existe, mesma organização, kind de chat) antes de vincular.
+    let asset: any = null;
+    if (dto.fileId) {
+      asset = await this.prisma.fileAsset.findUnique({ where: { id: dto.fileId } });
+      if (!asset || asset.organizationId !== user.organizationId) {
+        throw new NotFoundException('Anexo não encontrado');
+      }
+      if (!asset.kind?.startsWith('chat_')) {
+        throw new BadRequestException('Anexo inválido para o chat');
+      }
+    }
+
+    if (!text && !asset) {
+      throw new BadRequestException('Envie um texto ou um anexo');
+    }
+
     const message = await this.prisma.chatMessage.create({
-      data: { occurrenceId: id, userId: user.id, message: dto.message },
+      data: { occurrenceId: id, userId: user.id, message: text, fileAssetId: asset?.id ?? null },
       include: { user: { select: { name: true, role: true } } },
     });
 
@@ -396,7 +425,7 @@ export class EmergencyService {
       messageId: message.id,
     });
 
-    return this.formatChatMessage(message);
+    return this.formatChatMessage(message, asset);
   }
 
   // ── Checklist ──────────────────────────────────────────────────────────────
@@ -590,15 +619,26 @@ export class EmergencyService {
     };
   }
 
-  private formatChatMessage(m: any) {
+  private async formatChatMessage(m: any, asset?: any | null) {
     return {
       id: m.id,
       occurrenceId: m.occurrenceId,
       userId: m.userId,
       userName: m.user?.name ?? '—',
       userRole: m.user?.role ?? 'terminal',
-      message: m.message,
+      message: m.message ?? '',
       dateTime: m.createdAt,
+      // Item 10: anexo com URL assinada (readUrl só faz HMAC do id — sem consulta extra).
+      attachment: asset
+        ? {
+            id: asset.id,
+            url: await this.files.readUrl(asset.id),
+            mimeType: asset.mimeType,
+            originalName: asset.originalName,
+            size: asset.size,
+            kind: asset.kind,
+          }
+        : null,
     };
   }
 }

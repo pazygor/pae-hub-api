@@ -113,10 +113,16 @@ export class CreateEvidenceDto {
   description?: string;
 }
 
+// Item 10 (chat rico): mensagem = texto (legenda) e/ou anexo. Pelo menos um dos dois
+// (validado no service). `fileId` referencia um FileAsset criado via POST /api/files.
 export class CreateChatMessageDto {
-  @ApiProperty()
-  @IsString() @IsNotEmpty()
-  message!: string;
+  @ApiPropertyOptional()
+  @IsOptional() @IsString()
+  message?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional() @IsString() @IsNotEmpty()
+  fileId?: string; // cuid do FileAsset (item 4) — não é UUID
 }
 
 export class OccurrenceQueryDto {

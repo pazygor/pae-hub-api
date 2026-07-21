@@ -16,6 +16,7 @@ import { RisksModule } from './modules/risks/risks.module';
 import { EmergencyPlansModule } from './modules/emergency-plans/emergency-plans.module';
 import { MapElementsModule } from './modules/map-elements/map-elements.module';
 import { PaeDocumentsModule } from './modules/pae-documents/pae-documents.module';
+import { FilesModule } from './modules/files/files.module';
 import { TrainingsModule } from './modules/trainings/trainings.module';
 import { EpisModule } from './modules/epis/epis.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
@@ -49,6 +50,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     EmergencyPlansModule,
     MapElementsModule,
     PaeDocumentsModule,
+    FilesModule,
     TrainingsModule,
     EpisModule,
     ComplianceModule,

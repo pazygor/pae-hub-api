@@ -7,6 +7,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { assertTerminalsForSafetyWrite, assertSafetyRecordEditable } from '../../common/helpers/module-enforcement';
+import { FilesModule, FilesService } from '../files/files.module';
 
 // Fase 5b — Treinamentos + atribuições por usuário (Funcional §3.10).
 
@@ -22,6 +23,10 @@ class CreateTrainingDto {
 
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255)
   materialFileName?: string;
+
+  @ApiPropertyOptional({ description: 'FileAsset do material (upload real — item 4)' })
+  @IsOptional() @IsString()
+  materialFileId?: string;
 
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500)
   videoUrl?: string;
@@ -48,15 +53,18 @@ class AssignTrainingDto {
 
 @Injectable()
 export class TrainingsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private files: FilesService) {}
 
-  private format(t: any) {
+  private async format(t: any) {
     return {
       id: t.id,
       name: t.name,
       description: t.description ?? '',
       mandatory: t.mandatory,
       materialFileName: t.materialFileName ?? undefined,
+      materialFileId: t.materialFileId ?? undefined,
+      // URL assinada do material (item 4). Só quando há arquivo real.
+      materialUrl: t.materialFileId ? await this.files.readUrl(t.materialFileId) : undefined,
       videoUrl: t.videoUrl ?? undefined,
       terminalIds: t.terminalIds ?? [],
     };
@@ -78,7 +86,7 @@ export class TrainingsService {
       where: { organizationId: user.organizationId },
       orderBy: { createdAt: 'asc' },
     });
-    return trainings.map((t) => this.format(t));
+    return Promise.all(trainings.map((t) => this.format(t)));
   }
 
   async findAssignments(user: any) {
@@ -100,6 +108,7 @@ export class TrainingsService {
         description: dto.description ?? '',
         mandatory: dto.mandatory ?? false,
         materialFileName: dto.materialFileName,
+        materialFileId: dto.materialFileId,
         videoUrl: dto.videoUrl,
       },
     });
@@ -229,6 +238,7 @@ export class TrainingsController {
 }
 
 @Module({
+  imports: [FilesModule],
   providers: [TrainingsService],
   controllers: [TrainingsController],
 })

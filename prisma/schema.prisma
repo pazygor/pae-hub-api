@@ -263,6 +263,7 @@ model PAEDocument {
   docType        String   @db.VarChar(50)
   description    String?  @db.Text
   fileName       String   @db.VarChar(255)
+  fileId         String?  // FileAsset do arquivo real (upload — item 4)
   uploadedBy     String?  @db.VarChar(255)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -286,6 +287,7 @@ model Training {
   description      String   @db.Text
   mandatory        Boolean  @default(false)
   materialFileName String?  @db.VarChar(255)
+  materialFileId   String?  // FileAsset do material (upload real — item 4)
   videoUrl         String?  @db.VarChar(500)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -383,7 +385,8 @@ model ChatMessage {
   id           String   @id @default(uuid())
   occurrenceId String
   userId       String
-  message      String   @db.Text
+  message      String?  @db.Text // Item 10: opcional — vira legenda quando há anexo
+  fileAssetId  String? // Item 10: anexo opcional (FileAsset do item 4; ref. escalar, mesmo padrão do Training.materialFileId)
   createdAt    DateTime @default(now())
 
   occurrence Occurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
@@ -878,4 +881,21 @@ model AiFeedback {
   user User @relation(fields: [userId], references: [id])
 
   @@map("ai_feedback")
+}
+
+// Item 4 — arquivo/mídia armazenado (driver de storage abstraído por StorageService).
+// `storageKey` é a chave no driver ativo (disco local hoje; GCS depois).
+model FileAsset {
+  id             String   @id @default(cuid())
+  organizationId String
+  originalName   String   @db.VarChar(255)
+  storageKey     String   @db.VarChar(512)
+  mimeType       String   @db.VarChar(128)
+  size           Int
+  kind           String   @db.VarChar(64) // training_material | chat_image | chat_audio | document | compliance_evidence | other
+  uploadedById   String?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+  @@map("file_assets")
 }
