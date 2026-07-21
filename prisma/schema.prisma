@@ -496,6 +496,7 @@ model User {
   managedOperators User[]       @relation("TacticalTeam")
 
   refreshTokens       RefreshToken[]
+  accessSessions      AccessSession[]
   reportedOccurrences Occurrence[]         @relation("ReportedBy")
   timelineEvents      OccurrenceTimeline[]
   chatMessages        ChatMessage[]
@@ -533,6 +534,25 @@ model RefreshToken {
   @@index([userId])
   @@index([token])
   @@map("refresh_tokens")
+}
+
+// Sessão de acesso (Auditoria de Acesso — item 1): 1 linha por login. logoutAt
+// nulo = aberta; endReason 'logout' (saída explícita) ou 'expired' (TTL do refresh).
+model AccessSession {
+  id        String    @id @default(uuid())
+  userId    String
+  loginAt   DateTime  @default(now())
+  logoutAt  DateTime?
+  endReason String?   @db.VarChar(20) // 'logout' | 'expired' (null = aberta)
+  ipAddress String?   @db.VarChar(50)
+  userAgent String?   @db.VarChar(500)
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([loginAt])
+  @@map("access_sessions")
 }
 
 // ─── Emergency Types ──────────────────────────────────────────────────────────
@@ -781,6 +801,7 @@ model AuditLog {
   action     String   @db.VarChar(100)
   resource   String   @db.VarChar(100)
   resourceId String?  @db.VarChar(100)
+  terminalId String?  @db.VarChar(100) // terminal do recurso (ex.: ocorrência) — filtro/coluna da auditoria; sem FK (log independente)
   details    Json?
   ipAddress  String?  @db.VarChar(50)
   userAgent  String?  @db.VarChar(500)
@@ -790,6 +811,7 @@ model AuditLog {
 
   @@index([userId])
   @@index([resource])
+  @@index([terminalId])
   @@index([createdAt])
   @@map("audit_logs")
 }

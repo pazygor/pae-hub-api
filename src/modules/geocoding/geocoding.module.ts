@@ -1,6 +1,6 @@
 import { Module, Injectable, Logger, Controller, Post, Body, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNumber, IsOptional, IsString } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -17,6 +17,15 @@ export interface Coordinates {
 }
 interface CepAddress {
   street?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+}
+/** Endereço estruturado devolvido pela geocodificação reversa (PIN manual). */
+export interface ReverseAddress {
+  cep?: string;
+  street?: string;
+  number?: string;
   neighborhood?: string;
   city?: string;
   state?: string;
@@ -155,6 +164,116 @@ export class GeocodingService {
     if (!street && !neighborhood && !city) return null;
     return { street: clean(street), neighborhood: clean(neighborhood), city: clean(city), state: clean(state) };
   }
+
+  /**
+   * Coordenadas → endereço estruturado (Nominatim reverse) — usado pelo PIN manual
+   * do `LocationPicker`. Devolve os campos que o provedor resolver; o front decide
+   * como aplicar (hoje: substitui o endereço inteiro pelo do ponto).
+   * UF vem do ISO3166-2-lvl4 ("BR-SP" → "SP"), com fallback pelo nome do estado.
+   */
+  async reverseGeocode(lat: number, lng: number): Promise<ReverseAddress | null> {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&accept-language=pt-BR&lat=${lat}&lon=${lng}`;
+    const data = await fetchJson(url, { headers: { 'User-Agent': NOMINATIM_UA }, timeoutMs: 8000 });
+    const a = data?.address;
+    if (!a) {
+      this.logger.warn(`[Nominatim reverse] sem resultado para ${lat}, ${lng}`);
+      return null;
+    }
+    const result: ReverseAddress = {
+      // NÃO usamos o postcode do Nominatim: ele é aproximado e erra o CEP (que no
+      // Brasil é por trecho de rua). O CEP correto vem do ViaCEP, por logradouro.
+      cep: undefined,
+      street: clean(a.road ?? a.pedestrian ?? a.footway ?? a.cycleway),
+      number: clean(a.house_number),
+      neighborhood: clean(a.suburb ?? a.neighbourhood ?? a.quarter ?? a.city_district),
+      city: clean(a.city ?? a.town ?? a.village ?? a.municipality),
+      state: ufFrom(a),
+    };
+
+    // CEP autoritativo pela rua (ViaCEP). Também corrige a grafia da rua e o bairro
+    // oficial do CEP quando há um resultado confiável (um único CEP para o logradouro).
+    if (result.street && result.city && result.state) {
+      const byStreet = await this.cepByStreet(result.state, result.city, result.street);
+      if (byStreet) {
+        result.cep = byStreet.cep;
+        if (byStreet.logradouro) result.street = byStreet.logradouro;
+        if (byStreet.bairro) result.neighborhood = byStreet.bairro;
+      }
+    }
+
+    this.logger.log(`[reverse] ${lat}, ${lng} → ${result.street ?? '?'}, ${result.city ?? '?'}/${result.state ?? '?'} · CEP ${result.cep ?? '(sem)'}`);
+    return result;
+  }
+
+  /**
+   * CEP autoritativo por logradouro (ViaCEP): o postcode do Nominatim é aproximado,
+   * então buscamos o CEP real pela rua/cidade/UF. Só confiamos quando há **um** CEP
+   * para aquele logradouro; ruas com vários CEPs (ex.: avenidas) não dão para
+   * desambiguar sem o número → devolve null (o front deixa o CEP vazio, o que é
+   * melhor do que exibir um CEP errado).
+   */
+  private async cepByStreet(uf: string, city: string, street: string): Promise<{ cep: string; bairro?: string; logradouro?: string } | null> {
+    const target = normalizeStreet(street);
+    if (uf.length !== 2 || city.length < 3 || target.length < 3) return null;
+
+    const url = `https://viacep.com.br/ws/${encodeURIComponent(uf)}/${encodeURIComponent(city)}/${encodeURIComponent(street)}/json/`;
+    const list = await fetchJson(url, { timeoutMs: 6000 });
+    if (!Array.isArray(list) || list.length === 0) return null;
+
+    // Fica com as entradas cujo logradouro casa com a rua do ponto (normalizado).
+    const matches = list.filter((x: any) => {
+      const log = normalizeStreet(x?.logradouro);
+      return !!log && (log === target || log.includes(target) || target.includes(log));
+    });
+    const use = matches.length ? matches : list;
+    const distinctCeps = Array.from(new Set(use.map((x: any) => onlyCep(x?.cep)).filter(Boolean))) as string[];
+    if (distinctCeps.length !== 1) return null; // 0 = sem CEP; >1 = ambíguo (não chuta)
+
+    const chosen = use.find((x: any) => onlyCep(x?.cep) === distinctCeps[0]);
+    return { cep: distinctCeps[0], bairro: clean(chosen?.bairro), logradouro: clean(chosen?.logradouro) };
+  }
+}
+
+/** Normaliza logradouro p/ comparação: minúsculas, sem acento, só alfanumérico/espaço. */
+function normalizeStreet(s?: string): string {
+  return (s ?? '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** UF (2 letras) a partir do endereço do Nominatim: prefere ISO3166-2-lvl4, cai no nome do estado. */
+function ufFrom(a: any): string | undefined {
+  const iso = a?.['ISO3166-2-lvl4'];
+  if (typeof iso === 'string' && iso.includes('-')) {
+    const uf = iso.split('-')[1]?.toUpperCase();
+    if (uf?.length === 2) return uf;
+  }
+  return stateNameToUf(clean(a?.state));
+}
+
+const UF_BY_NAME: Record<string, string> = {
+  'acre': 'AC', 'alagoas': 'AL', 'amapá': 'AP', 'amazonas': 'AM', 'bahia': 'BA',
+  'ceará': 'CE', 'distrito federal': 'DF', 'espírito santo': 'ES', 'goiás': 'GO',
+  'maranhão': 'MA', 'mato grosso': 'MT', 'mato grosso do sul': 'MS', 'minas gerais': 'MG',
+  'pará': 'PA', 'paraíba': 'PB', 'paraná': 'PR', 'pernambuco': 'PE', 'piauí': 'PI',
+  'rio de janeiro': 'RJ', 'rio grande do norte': 'RN', 'rio grande do sul': 'RS',
+  'rondônia': 'RO', 'roraima': 'RR', 'santa catarina': 'SC', 'são paulo': 'SP',
+  'sergipe': 'SE', 'tocantins': 'TO',
+};
+function stateNameToUf(name?: string): string | undefined {
+  if (!name) return undefined;
+  return UF_BY_NAME[name.toLowerCase()] ?? undefined;
+}
+
+/** Normaliza CEP para 00000-000; devolve undefined se não tiver 8 dígitos. */
+function onlyCep(v?: string): string | undefined {
+  if (!v) return undefined;
+  const d = v.replace(/\D/g, '');
+  if (d.length !== 8) return undefined;
+  return `${d.slice(0, 5)}-${d.slice(5)}`;
 }
 
 function clean(v?: string): string | undefined {
@@ -171,6 +290,11 @@ class GeocodeDto {
   @ApiPropertyOptional() @IsOptional() @IsString() state?: string;
 }
 
+class ReverseGeocodeDto {
+  @ApiProperty() @IsNumber() latitude: number;
+  @ApiProperty() @IsNumber() longitude: number;
+}
+
 @ApiTags('Geocoding')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -182,6 +306,12 @@ export class GeocodingController {
   @ApiOperation({ summary: 'Resolve latitude/longitude a partir de CEP/endereço (Localizar)' })
   async coordinates(@Body() dto: GeocodeDto): Promise<Coordinates | null> {
     return this.service.resolveCoordinates(dto);
+  }
+
+  @Post('address')
+  @ApiOperation({ summary: 'Resolve o endereço a partir de latitude/longitude (PIN manual)' })
+  async address(@Body() dto: ReverseGeocodeDto): Promise<ReverseAddress | null> {
+    return this.service.reverseGeocode(dto.latitude, dto.longitude);
   }
 }
 

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException,
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway, CopEventType } from '../realtime/realtime.gateway';
 import { FilesService } from '../files/files.module';
+import { AuditService } from '../audit/audit.service';
 import { tenantScope, userCanAccessTerminal, entityPermittedTerminals } from '../../common/helpers/tenant-scope';
 import {
   CreateOccurrenceDto,
@@ -27,6 +28,7 @@ export class EmergencyService {
     private prisma: PrismaService,
     private realtime: RealtimeGateway,
     private files: FilesService, // item 10: URL assinada dos anexos do chat
+    private audit: AuditService,
   ) {}
 
   async findAll(query: OccurrenceQueryDto, user: any) {
@@ -175,6 +177,11 @@ export class EmergencyService {
       terminalName: occurrence.terminal?.name ?? null,
     });
 
+    await this.audit.record({
+      userId: user.id, action: 'create', resource: 'occurrence', resourceId: occurrence.id, terminalId: occurrence.terminalId,
+      details: { incNumber: occurrence.incNumber, type: occurrence.type, criticality: occurrence.criticality },
+    });
+
     return result;
   }
 
@@ -233,6 +240,14 @@ export class EmergencyService {
 
     if (applicable.length > 0) {
       this.logger.log(`Occurrence ${occurrence.id}: ${applicable.length} entidade(s) acionada(s) automaticamente`);
+      await this.audit.record({
+        userId: user.id, action: 'dispatch', resource: 'occurrence', resourceId: occurrence.id, terminalId: occurrence.terminalId,
+        details: {
+          incNumber: occurrence.incNumber,
+          entidades: applicable.map((r) => r.entity.name),
+          total: applicable.length,
+        },
+      });
     }
   }
 
@@ -250,6 +265,11 @@ export class EmergencyService {
         terminal: { select: { id: true, name: true } },
         timeline: { orderBy: { createdAt: 'asc' }, include: { user: { select: { name: true } } } },
       },
+    });
+
+    await this.audit.record({
+      userId: user.id, action: 'update', resource: 'occurrence', resourceId: id, terminalId: occurrence.terminalId,
+      details: { incNumber: occurrence.incNumber, campos: Object.keys(fields) },
     });
 
     return this.formatOccurrence(updated);
@@ -285,6 +305,11 @@ export class EmergencyService {
     this.realtime.emitToOrganization(occurrence.organizationId, CopEventType.OCCURRENCE_STATUS_CHANGED, {
       occurrenceId: id,
       status: dto.status,
+    });
+
+    await this.audit.record({
+      userId: user.id, action: 'status_change', resource: 'occurrence', resourceId: id, terminalId: occurrence.terminalId,
+      details: { incNumber: occurrence.incNumber, de: occurrence.status, para: dto.status },
     });
 
     return this.formatOccurrence(updated);
@@ -364,6 +389,11 @@ export class EmergencyService {
     this.realtime.emitToOrganization(occurrence.organizationId, CopEventType.TIMELINE_ADDED, {
       occurrenceId: id,
       type: dto.type,
+    });
+
+    await this.audit.record({
+      userId: user.id, action: 'timeline_add', resource: 'occurrence', resourceId: id, terminalId: occurrence.terminalId,
+      details: { incNumber: occurrence.incNumber, tipo: dto.type },
     });
 
     return this.formatTimelineEvent(event);
@@ -496,6 +526,12 @@ export class EmergencyService {
     await this.checkTenantAccess(occurrence, user);
 
     await this.prisma.occurrence.update({ where: { id }, data: { isActive: false } });
+
+    await this.audit.record({
+      userId: user.id, action: 'delete', resource: 'occurrence', resourceId: id, terminalId: occurrence.terminalId,
+      details: { incNumber: occurrence.incNumber, type: occurrence.type },
+    });
+
     return { message: 'Ocorrência removida com sucesso' };
   }
 

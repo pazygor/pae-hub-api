@@ -27,6 +27,7 @@ import { SafetyModule } from './modules/safety/safety.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AiCommandModule } from './modules/ai-command/ai-command.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
+import { AuditModule } from './modules/audit/audit.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -61,6 +62,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     DashboardModule,
     AiCommandModule,
     RealtimeModule,
+    AuditModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

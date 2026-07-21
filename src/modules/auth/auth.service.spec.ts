@@ -24,6 +24,13 @@ const mockPrisma = {
     updateMany: jest.fn(),
     deleteMany: jest.fn(),
   },
+  // Auditoria de acesso (item 1) — login abre e logout fecha a sessão.
+  accessSession: {
+    create: jest.fn().mockResolvedValue({}),
+    findFirst: jest.fn().mockResolvedValue(null),
+    update: jest.fn().mockResolvedValue({}),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
 };
 
 const mockJwt = {
