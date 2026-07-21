@@ -33,7 +33,9 @@ export class LocalDiskStorage implements StorageService {
   private readonly dir: string;
 
   constructor(config: ConfigService) {
-    const configured = config.get<string>('UPLOAD_DIR') || 'uploads';
+    // Alinhado ao .env.example (STORAGE_LOCAL_PATH); UPLOAD_DIR fica como alias legado.
+    const configured =
+      config.get<string>('STORAGE_LOCAL_PATH') || config.get<string>('UPLOAD_DIR') || 'uploads';
     this.dir = isAbsolute(configured) ? configured : join(process.cwd(), configured);
     fs.mkdir(this.dir, { recursive: true }).catch((e) =>
       this.logger.error(`Falha ao criar UPLOAD_DIR ${this.dir}: ${e}`),
