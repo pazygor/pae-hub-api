@@ -75,8 +75,9 @@ export class TrainingsService {
       id: ut.id,
       trainingId: ut.trainingId,
       userId: ut.userId,
-      completedDate: ut.completedDate,
-      expiryDate: ut.expiryDate,
+      // nulos = PENDENTE (atribuído, ainda não concluído)
+      completedDate: ut.completedDate ?? null,
+      expiryDate: ut.expiryDate ?? null,
       certificate: ut.certificate ?? undefined,
     };
   }
@@ -143,16 +144,19 @@ export class TrainingsService {
     return { message: 'Treinamento removido' };
   }
 
+  /**
+   * Atribuir = criar uma PENDÊNCIA (o usuário precisa fazer). Sem datas de conclusão.
+   * Concluir é outra ação (`complete`). Dedup: pula quem já tem registro pendente OU
+   * ainda válido (não duplica atribuição).
+   */
   async assign(id: string, dto: AssignTrainingDto, user: any) {
     await this.findOwned(id, user);
-    const completedDate = dto.completedDate ? new Date(dto.completedDate) : new Date();
-    const expiryDate = dto.expiryDate
-      ? new Date(dto.expiryDate)
-      : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
-
-    // Ignora usuários que já têm atribuição vigente deste treinamento
     const existing = await this.prisma.userTraining.findMany({
-      where: { trainingId: id, userId: { in: dto.userIds }, expiryDate: { gte: new Date() } },
+      where: {
+        trainingId: id,
+        userId: { in: dto.userIds },
+        OR: [{ completedDate: null }, { expiryDate: { gte: new Date() } }],
+      },
       select: { userId: true },
     });
     const skip = new Set(existing.map((e) => e.userId));
@@ -162,11 +166,51 @@ export class TrainingsService {
     for (const userId of toCreate) {
       created.push(
         await this.prisma.userTraining.create({
-          data: { trainingId: id, userId, completedDate, expiryDate, certificate: dto.certificate },
+          data: { trainingId: id, userId, completedDate: null, expiryDate: null },
         }),
       );
     }
     return created.map((ut) => this.formatAssignment(ut));
+  }
+
+  /**
+   * Concluir = registrar a conclusão (data + validade). Atualiza o registro pendente
+   * ou vencido mais recente; se não houver, cria concluído. Default: hoje / +1 ano.
+   * Usado pelo "Concluir" do Meu Painel e pelo form de conclusão com datas.
+   */
+  async complete(id: string, dto: AssignTrainingDto, user: any) {
+    await this.findOwned(id, user);
+    const now = new Date();
+    const completedDate = dto.completedDate ? new Date(dto.completedDate) : now;
+    const expiryDate = dto.expiryDate
+      ? new Date(dto.expiryDate)
+      : new Date(completedDate.getTime() + 365 * 24 * 60 * 60 * 1000);
+
+    const result: any[] = [];
+    for (const userId of dto.userIds) {
+      const prev = await this.prisma.userTraining.findFirst({
+        where: { trainingId: id, userId },
+        orderBy: { createdAt: 'desc' },
+      });
+      const isPendingOrExpired = prev && (prev.completedDate === null || (prev.expiryDate && prev.expiryDate < now));
+      if (isPendingOrExpired) {
+        result.push(
+          await this.prisma.userTraining.update({
+            where: { id: prev!.id },
+            data: { completedDate, expiryDate, certificate: dto.certificate },
+          }),
+        );
+      } else if (prev) {
+        result.push(prev); // já válido — mantém
+      } else {
+        result.push(
+          await this.prisma.userTraining.create({
+            data: { trainingId: id, userId, completedDate, expiryDate, certificate: dto.certificate },
+          }),
+        );
+      }
+    }
+    return result.map((ut) => this.formatAssignment(ut));
   }
 
   async removeAssignment(assignmentId: string, user: any) {
@@ -215,6 +259,13 @@ export class TrainingsController {
   @Roles('admin', 'terminal')
   assign(@Param('id') id: string, @Body() dto: AssignTrainingDto, @CurrentUser() user: any) {
     return this.service.assign(id, dto, user);
+  }
+
+  // Concluir (registra data + validade). Separado do assign, que cria pendência.
+  @Post(':id/complete')
+  @Roles('admin', 'terminal')
+  complete(@Param('id') id: string, @Body() dto: AssignTrainingDto, @CurrentUser() user: any) {
+    return this.service.complete(id, dto, user);
   }
 
   @Delete('assignments/:assignmentId')

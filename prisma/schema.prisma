@@ -301,13 +301,14 @@ model Training {
 
 // Atribuição de treinamento por usuário (tabela associativa do DER)
 model UserTraining {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
   trainingId    String
   userId        String
-  completedDate DateTime
-  expiryDate    DateTime
-  certificate   String?  @db.VarChar(255)
-  createdAt     DateTime @default(now())
+  // Nulos = atribuído/PENDENTE (o usuário precisa fazer). Preenchidos = CONCLUÍDO.
+  completedDate DateTime?
+  expiryDate    DateTime?
+  certificate   String?   @db.VarChar(255)
+  createdAt     DateTime  @default(now())
 
   training Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
