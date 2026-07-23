@@ -487,6 +487,9 @@ model User {
   department             String?    @db.VarChar(100)
   lastLoginAt            DateTime?
   alertsSeenAt           DateTime? // último "visto" dos alertas de ocorrência (re-hidratação no login)
+  // Termo de Consentimento (item 6): gating rápido. A prova imutável fica em TermsAcceptance.
+  termsAcceptedAt        DateTime?
+  termsVersion           String?    @db.VarChar(20)
   createdAt              DateTime   @default(now())
   updatedAt              DateTime   @updatedAt
 
@@ -514,12 +517,29 @@ model User {
   knowledgeEntries    KnowledgeEntry[]
   promptEvaluations   PromptEvaluation[]
   aiFeedback          AiFeedback[]
+  termsAcceptances    TermsAcceptance[]
 
   @@index([organizationId])
   @@index([terminalId])
   @@index([entityId])
   @@index([email])
   @@map("users")
+}
+
+// Item 6 — log APPEND-ONLY de aceite do Termo de Consentimento (1 linha por aceite,
+// nunca sobrescrito). É o registro recuperável para fins de LGPD/auditoria.
+model TermsAcceptance {
+  id           String   @id @default(cuid())
+  userId       String
+  termsVersion String   @db.VarChar(20)
+  acceptedAt   DateTime @default(now())
+  ip           String?  @db.VarChar(64)
+  userAgent    String?  @db.VarChar(512)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("terms_acceptances")
 }
 
 model RefreshToken {

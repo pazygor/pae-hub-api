@@ -78,6 +78,8 @@ export class AuthService {
         organizationName: user.organization?.name,
         avatarUrl: user.avatarUrl,
         alertsSeenAt: user.alertsSeenAt,
+        termsAcceptedAt: user.termsAcceptedAt,
+        termsVersion: user.termsVersion,
         allowedModules: user.allowedModules,
         // Entity: terminais visíveis derivam da Permissão (para filtro de notificação no front).
         allowedTerminals: await this.effectiveAllowedTerminals(user),
@@ -206,13 +208,16 @@ export class AuthService {
       data: { passwordHash: newHash },
     });
 
-    // Revoke all refresh tokens after password change
+    // Segurança: revoga TODAS as sessões existentes (outros dispositivos caem).
     await this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
 
-    return { message: 'Senha alterada com sucesso' };
+    // UX: emite tokens novos para a sessão ATUAL — quem trocou a própria senha
+    // continua logado neste dispositivo (o refresh novo é criado após a revogação).
+    const tokens = await this.generateTokens(user);
+    return { message: 'Senha alterada com sucesso', ...tokens };
   }
 
   async getMe(userId: string) {
@@ -241,6 +246,8 @@ export class AuthService {
       department: user.department,
       lastLoginAt: user.lastLoginAt,
       alertsSeenAt: user.alertsSeenAt,
+      termsAcceptedAt: user.termsAcceptedAt,
+      termsVersion: user.termsVersion,
       allowedModules: user.allowedModules,
       allowedTerminals: await this.effectiveAllowedTerminals(user),
       allowedOccurrenceTypes: user.allowedOccurrenceTypes,
@@ -260,6 +267,22 @@ export class AuthService {
       select: { alertsSeenAt: true },
     });
     return updated;
+  }
+
+  /**
+   * Registra o aceite do Termo de Consentimento (item 6). Grava UMA linha imutável
+   * em TermsAcceptance (com ip/userAgent) e atualiza o gating no User.
+   */
+  async acceptTerms(userId: string, version: string, meta?: { ip?: string; userAgent?: string }) {
+    const now = new Date();
+    await this.prisma.termsAcceptance.create({
+      data: { userId, termsVersion: version, acceptedAt: now, ip: meta?.ip, userAgent: meta?.userAgent },
+    });
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { termsAcceptedAt: now, termsVersion: version },
+    });
+    return { termsAcceptedAt: now, termsVersion: version };
   }
 
   private async generateTokens(user: { id: string; email: string; role: string; accessLevel?: string | null; terminalId?: string | null; organizationId: string }) {

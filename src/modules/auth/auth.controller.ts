@@ -2,7 +2,7 @@ import { Controller, Post, Get, Body, Req, UseGuards, HttpCode, HttpStatus } fro
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
-import { LoginDto, RefreshTokenDto, ChangePasswordDto } from './dto/auth.dto';
+import { LoginDto, RefreshTokenDto, ChangePasswordDto, AcceptTermsDto } from './dto/auth.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/roles.decorator';
@@ -59,5 +59,16 @@ export class AuthController {
   @ApiOperation({ summary: 'Alterar senha do usuário autenticado' })
   changePassword(@CurrentUser('id') userId: string, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(userId, dto);
+  }
+
+  @Post('accept-terms')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Registra o aceite do Termo de Consentimento (item 6)' })
+  acceptTerms(@CurrentUser('id') userId: string, @Body() dto: AcceptTermsDto, @Req() req: Request) {
+    return this.authService.acceptTerms(userId, dto.version, {
+      ip: clientIp(req),
+      userAgent: req.headers['user-agent'],
+    });
   }
 }
