@@ -19,6 +19,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "backfill:audio": "ts-node --transpile-only src/scripts/backfill-audio-aac.ts",
     "prisma:reset": "prisma migrate reset --force"
   },
   "dependencies": {

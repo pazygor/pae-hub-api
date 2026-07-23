@@ -11,7 +11,8 @@ import { randomUUID } from 'crypto';
  */
 export interface StorageService {
   save(input: { buffer: Buffer; mimeType: string; originalName: string }): Promise<{ key: string }>;
-  getReadStream(key: string): NodeJS.ReadableStream;
+  /** `range` (inclusivo) serve o byte-range pedido — exigido pelo WebKit p/ áudio/vídeo. */
+  getReadStream(key: string, range?: { start: number; end: number }): NodeJS.ReadableStream;
   delete(key: string): Promise<void>;
   /**
    * URL direta assinada do próprio storage (nuvem). Driver local devolve `null`
@@ -53,8 +54,8 @@ export class LocalDiskStorage implements StorageService {
     return { key };
   }
 
-  getReadStream(key: string): NodeJS.ReadableStream {
-    return createReadStream(this.resolve(key));
+  getReadStream(key: string, range?: { start: number; end: number }): NodeJS.ReadableStream {
+    return createReadStream(this.resolve(key), range);
   }
 
   async delete(key: string): Promise<void> {

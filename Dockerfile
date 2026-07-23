@@ -8,9 +8,11 @@ FROM node:22-bookworm-slim
 
 WORKDIR /app
 
-# openssl é requerido pelo Prisma; ca-certificates para TLS
+# openssl é requerido pelo Prisma; ca-certificates para TLS.
+# ffmpeg: normaliza áudio para AAC/mp4 no upload — o WebKit (Safari/iOS) não
+# decodifica webm/opus, que é o que o Chrome grava.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && apt-get install -y --no-install-recommends openssl ca-certificates ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
 # Instala dependências (usa cache de camada enquanto package*.json não muda)
